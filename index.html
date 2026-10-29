@@ -428,13 +428,13 @@
       map = L.map('map', {
         center: [49.3200, -122.9800],
         zoom: 12,
-        layers: [cartoDark] // Default dark theme
+        layers: [osmStandard] // Default to standard OSM raster layer
       });
 
       const baseMaps = {
+        "OSM Standard": osmStandard,
         "Carto Dark Matter": cartoDark,
-        "Carto Voyager": cartoVoyager,
-        "OSM Standard": osmStandard
+        "Carto Voyager": cartoVoyager
       };
 
       L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
