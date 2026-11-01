@@ -4,8 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Velovet Ride</title>
-    <!-- Leaflet CSS for OpenStreetMap -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- 1. Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    
+    <!-- 2. Leaflet JS (Loaded in <head> so 'L' is available globally before body scripts run) -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
     <style>
         :root {
             --zwift-blue: #007bff;
@@ -16,19 +21,19 @@
         body, html {
             margin: 0; padding: 0; height: 100%; width: 100%;
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            background-color: #000; color: var(--text-light);
+            background-color: #111; color: var(--text-light);
             overflow: hidden;
         }
         /* iOS Bluetooth Banner */
         #ios-banner {
             background-color: #ffcc00; color: #000;
             text-align: center; padding: 10px; font-weight: bold;
-            font-size: 0.9em; z-index: 2000; position: absolute; width: 100%;
+            font-size: 0.9em; z-index: 2000; position: absolute; width: 100%; top: 0; left: 0;
         }
         #ios-banner.hidden { display: none; }
         
-        /* Map Background */
-        #map { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        /* Map Container */
+        #map { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; background: #222; }
         
         /* UI Overlays */
         .hud-panel {
@@ -38,14 +43,97 @@
             border: 1px solid rgba(255,255,255,0.1);
         }
         /* Top Left: Stats */
-        #stats-panel { top: 50px; left: 20px; min-width: 250px; }
-        .stat-box { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; border-bottom: 1px solid #333; padding-bottom: 5px; }
-        .stat-value { font-size: 2.2em; font-weight: bold; font-style: italic; color: var(--zwift-orange); }
-        .stat-label { font-size: 0.9em; text-transform: uppercase; color: #aaa; }
+        #stats-panel { top: 50px; left: 20px; min-width: 240px; }
+        .stat-box { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; border-bottom: 1px solid #333; padding-bottom: 4px; }
+        .stat-value { font-size: 2em; font-weight: bold; font-style: italic; color: var(--zwift-orange); }
+        .stat-label { font-size: 0.85em; text-transform: uppercase; color: #aaa; }
         
         /* Top Right: Controls & Connection */
-        #controls-panel { top: 50px; right: 20px; width: 300px; }
+        #controls-panel { top: 50px; right: 20px; width: 280px; }
         .btn {
             display: block; width: 100%; padding: 12px; margin-top: 10px;
             background: var(--zwift-blue); color: white; border: none;
-            border-radius: 6
+            border-radius: 6px; font-weight: bold; text-transform: uppercase;
+            cursor: pointer; transition: background 0.2s; box-sizing: border-box;
+        }
+        .btn:hover { background: #0056b3; }
+        .btn:disabled { background: #555; cursor: not-allowed; }
+        #btnConnect { background: var(--zwift-orange); }
+        #btnConnect.ready { background: #28a745; }
+        
+        /* Bottom Left: Diagnostics */
+        #diag-panel { bottom: 20px; left: 20px; width: 320px; height: 140px; overflow-y: auto; font-family: monospace; font-size: 0.8em; }
+        .log-error { color: #ff4d4d; } .log-warn { color: #ffcc00; } .log-info { color: #88ff88; }
+        
+        /* Bottom Right: Leaderboard */
+        #leaderboard-panel { bottom: 20px; right: 20px; width: 280px; max-height: 180px; overflow-y: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
+        th, td { text-align: left; padding: 5px; border-bottom: 1px solid #444; }
+        th { color: var(--zwift-orange); }
+
+        /* Sliders and Inputs */
+        input[type="range"] { width: 100%; margin: 10px 0; }
+        input[type="file"] { width: 100%; margin-top: 10px; color: white; font-size: 0.8em; }
+    </style>
+</head>
+<body>
+
+    <div id="ios-banner" class="hidden">
+        NOTICE: Bluefy Web BLE Browser or WebBLE required for Bluetooth on iOS Safari. 
+        <span style="cursor:pointer; text-decoration:underline; margin-left:10px;" onclick="document.getElementById('ios-banner').classList.add('hidden')">Dismiss</span>
+    </div>
+
+    <!-- Map Element (Must exist in DOM before script loads) -->
+    <div id="map"></div>
+
+    <div id="stats-panel" class="hud-panel">
+        <div class="stat-box">
+            <span class="stat-label">Power</span>
+            <div><span class="stat-value" id="val-power">0</span> W</div>
+        </div>
+        <div class="stat-box">
+            <span class="stat-label">Heart Rate</span>
+            <div><span class="stat-value" id="val-hr" style="color:#ff4d4d;">--</span> BPM</div>
+        </div>
+        <div class="stat-box">
+            <span class="stat-label">Speed</span>
+            <div><span class="stat-value" id="val-speed">0.0</span> km/h</div>
+        </div>
+        <div class="stat-box">
+            <span class="stat-label">Distance</span>
+            <div><span class="stat-value" id="val-dist">0.00</span> km</div>
+        </div>
+        <div class="stat-box">
+            <span class="stat-label">Gradient</span>
+            <div><span class="stat-value" id="val-grad" style="color:#28a745;">0.0</span> %</div>
+        </div>
+    </div>
+
+    <div id="controls-panel" class="hud-panel">
+        <h3 style="margin:0 0 10px 0; color:var(--zwift-orange); text-transform:uppercase; font-size:1.1em;">Velovet Ride</h3>
+        
+        <button id="btnConnect" class="btn">Waiting for Bluetooth devices</button>
+        <button id="btnConnectHR" class="btn" style="background:#555;">Connect Heart Rate</button>
+        
+        <hr style="border-color:#333; margin:15px 0;">
+        
+        <label class="stat-label">Route Selection</label>
+        <button id="btnPreset" class="btn" style="background:#444;">Load North Van 30km Preset</button>
+        <input type="file" id="fileGpx" accept=".gpx" />
+
+        <hr style="border-color:#333; margin:15px 0;">
+
+        <label class="stat-label">Target Wattage: <span id="val-target-watt">200</span>W</label>
+        <input type="range" id="sliderWattage" min="50" max="600" value="200" step="5">
+    </div>
+
+    <div id="diag-panel" class="hud-panel">
+        <div style="color:var(--zwift-orange); font-weight:bold; margin-bottom:5px; position:sticky; top:0; background:var(--bg-dark);">Diagnostic Logs</div>
+        <div id="log-content"></div>
+    </div>
+
+    <div id="leaderboard-panel" class="hud-panel">
+        <div style="color:var(--zwift-orange); font-weight:bold; margin-bottom:8px;">Club Leaderboard</div>
+        <table id="leaderboard-table">
+            <tr><th>Rider</th><th>Dist</th><th>Avg Watts</th></tr>
+        </table>
