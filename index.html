@@ -1,1420 +1,469 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full bg-slate-950">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Velovet Ride - Indoor Cycling</title>
-  
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            zwift: {
-              orange: '#FF5500',
-              orangeDark: '#E04A00',
-              blue: '#00CCFF',
-              green: '#00FF66',
-              yellow: '#FFCC00',
-              purple: '#AA00FF',
-              dark: '#0D1117',
-              panel: 'rgba(15, 23, 42, 0.85)'
-            }
-          },
-          fontFamily: {
-            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif']
-          }
-        }
-      }
-    }
-  </script>
-
-  <!-- Leaflet CSS & JS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-  <!-- FontAwesome Icons -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
-  <style>
-    /* Custom scrollbars */
-    ::-webkit-scrollbar {
-      width: 6px;
-      height: 6px;
-    }
-    ::-webkit-scrollbar-track {
-      background: rgba(15, 23, 42, 0.6);
-    }
-    ::-webkit-scrollbar-thumb {
-      background: #FF5500;
-      border-radius: 3px;
-    }
-
-    /* Glow utility effects */
-    .glow-orange {
-      box-shadow: 0 0 20px rgba(255, 85, 0, 0.45);
-    }
-    .glow-blue {
-      box-shadow: 0 0 20px rgba(0, 204, 255, 0.4);
-    }
-    .text-glow-orange {
-      text-shadow: 0 0 12px rgba(255, 85, 0, 0.7);
-    }
-    .text-glow-blue {
-      text-shadow: 0 0 12px rgba(0, 204, 255, 0.7);
-    }
-
-    /* Glassmorphism panels */
-    .glass-panel {
-      background: rgba(15, 23, 42, 0.88);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-    }
-
-    /* Leaflet map styling */
-    .leaflet-container {
-      background-color: #0b0f19 !important;
-      font-family: inherit;
-    }
-    .leaflet-tile-pane {
-      filter: brightness(0.75) contrast(1.15) saturate(1.1) invert(0.9) hue-rotate(200deg);
-    }
-
-    /* Pulse animation for map marker */
-    @keyframes pulse-ring {
-      0% { transform: scale(0.9); opacity: 0.9; }
-      50% { transform: scale(1.25); opacity: 0.4; }
-      100% { transform: scale(0.9); opacity: 0.9; }
-    }
-    .pulse-ring {
-      animation: pulse-ring 2s infinite ease-in-out;
-    }
-  </style>
-</head>
-<body class="h-full text-slate-100 flex flex-col font-sans select-none overflow-hidden bg-slate-950">
-
-  <!-- iOS Web Bluetooth Alert Banner -->
-  <div id="bleAlertBanner" class="bg-gradient-to-r from-zwift-orange via-orange-600 to-amber-600 text-white px-4 py-2 text-xs md:text-sm flex items-center justify-between shadow-lg z-50 transition-all duration-300">
-    <div class="flex items-center gap-2">
-      <i class="fa-solid fa-triangle-exclamation text-yellow-300 text-base animate-bounce"></i>
-      <span><strong>iOS Bluetooth Notice:</strong> Apple Safari on iOS blocks Web Bluetooth. To pair FTMS Smart Trainers (Tacx Neo, Wahoo) on iPhone/iPad, please run Velovet Ride in <strong class="underline decoration-yellow-300">Bluefy Web BLE Browser</strong> or <strong class="underline decoration-yellow-300">WebBLE</strong>.</span>
-    </div>
-    <button onclick="dismissAlertBanner()" class="ml-4 bg-black/30 hover:bg-black/50 text-white rounded-full p-1 w-6 h-6 flex items-center justify-center transition">
-      <i class="fa-solid fa-xmark"></i>
-    </button>
-  </div>
-
-  <!-- App Header -->
-  <header class="bg-slate-900/95 border-b border-slate-800 px-4 py-2 flex items-center justify-between z-40 relative">
-    <div class="flex items-center gap-3">
-      <div class="bg-zwift-orange text-white font-black px-3 py-1 rounded-lg text-xl italic tracking-wider flex items-center gap-1.5 glow-orange">
-        <i class="fa-solid fa-bolt text-yellow-300"></i> VELOVET <span class="text-slate-950 bg-white px-1.5 py-0.5 rounded not-italic text-xs tracking-normal">RIDE</span>
-      </div>
-      <div class="hidden sm:flex items-center gap-2 text-xs text-slate-400 border-l border-slate-700 pl-3">
-        <span class="inline-block w-2 h-2 rounded-full bg-zwift-green animate-ping"></span>
-        <span id="routeTitleHeader" class="font-bold text-slate-200">Gillnetter Route (Port Coquitlam)</span>
-      </div>
-    </div>
-
-    <!-- Quick Status & Action Buttons -->
-    <div class="flex items-center gap-2">
-      <button id="btnTrainerConnect" onclick="toggleTrainerConnection()" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700">
-        <i id="trainerStatusIcon" class="fa-solid fa-bicycle text-slate-500"></i>
-        <span id="trainerStatusText">Trainer: Disconnected</span>
-      </button>
-
-      <button id="btnHrConnect" onclick="toggleHrConnection()" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700">
-        <i id="hrStatusIcon" class="fa-solid fa-heart-pulse text-red-500"></i>
-        <span id="hrStatusText">HR: Disconnected</span>
-      </button>
-
-      <button onclick="toggleDiagPanel()" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs" title="BLE Diagnostics Console">
-        <i class="fa-solid fa-terminal"></i>
-      </button>
-
-      <button onclick="openLeaderboard()" class="p-2 rounded-lg bg-zwift-orange/20 hover:bg-zwift-orange/30 text-zwift-orange border border-zwift-orange/40 text-xs font-bold flex items-center gap-1.5">
-        <i class="fa-solid fa-trophy"></i>
-        <span class="hidden md:inline">Leaderboard</span>
-      </button>
-    </div>
-  </header>
-
-  <!-- Main Grid Viewport -->
-  <main class="flex-1 relative overflow-hidden flex flex-col md:flex-row">
-
-    <!-- Map & Zwift HUD Visualizer Area -->
-    <div class="flex-1 relative flex flex-col h-full">
-      
-      <!-- OpenStreetMap Container -->
-      <div id="map" class="w-full h-full z-0"></div>
-
-      <!-- Zwift Style Metrics HUD (Top Grid) -->
-      <div class="absolute top-3 left-3 right-3 z-10 pointer-events-none grid grid-cols-2 md:grid-cols-4 gap-2.5">
-        
-        <!-- POWER / ERG -->
-        <div class="glass-panel p-2.5 rounded-xl border-l-4 border-zwift-orange pointer-events-auto shadow-2xl">
-          <div class="text-[10px] font-bold text-slate-400 tracking-wider uppercase flex justify-between items-center">
-            <span>POWER</span>
-            <span id="ergBadge" class="bg-zwift-orange/20 text-zwift-orange px-1.5 py-0.5 rounded text-[9px] font-black">SIM MODE</span>
-          </div>
-          <div class="flex items-baseline gap-1 mt-0.5">
-            <span id="hudPower" class="text-3xl md:text-4xl font-black text-white tracking-tight text-glow-orange">0</span>
-            <span class="text-xs font-bold text-zwift-orange">WATTS</span>
-          </div>
-          <div class="mt-1 text-[11px] text-slate-300 flex justify-between">
-            <span>Target: <strong id="hudTargetPower" class="text-white">180W</strong></span>
-            <span>Avg: <strong id="hudAvgPower" class="text-slate-200">0W</strong></span>
-          </div>
-        </div>
-
-        <!-- SPEED & CADENCE -->
-        <div class="glass-panel p-2.5 rounded-xl border-l-4 border-zwift-blue pointer-events-auto shadow-2xl">
-          <div class="text-[10px] font-bold text-slate-400 tracking-wider uppercase flex justify-between">
-            <span>SPEED & CADENCE</span>
-            <i class="fa-solid fa-gauge-high text-zwift-blue"></i>
-          </div>
-          <div class="flex items-baseline justify-between mt-0.5">
-            <div>
-              <span id="hudSpeed" class="text-2xl md:text-3xl font-black text-white tracking-tight text-glow-blue">0.0</span>
-              <span class="text-[10px] font-bold text-zwift-blue">KM/H</span>
-            </div>
-            <div class="text-right">
-              <span id="hudCadence" class="text-2xl md:text-3xl font-black text-emerald-400 tracking-tight">0</span>
-              <span class="text-[10px] font-bold text-emerald-400">RPM</span>
-            </div>
-          </div>
-          <div class="mt-1 text-[11px] text-slate-300 flex justify-between">
-            <span>Avg Speed: <strong id="hudAvgSpeed" class="text-white">0.0</strong></span>
-            <span>Gear: <strong id="hudVirtualGear" class="text-zwift-blue font-bold">7 / 12</strong></span>
-          </div>
-        </div>
-
-        <!-- HEART RATE & GRADIENT -->
-        <div class="glass-panel p-2.5 rounded-xl border-l-4 border-red-500 pointer-events-auto shadow-2xl">
-          <div class="text-[10px] font-bold text-slate-400 tracking-wider uppercase flex justify-between">
-            <span>HEART RATE / SLOPE</span>
-            <i class="fa-solid fa-mountain text-amber-500"></i>
-          </div>
-          <div class="flex items-baseline justify-between mt-0.5">
-            <div>
-              <span id="hudHr" class="text-2xl md:text-3xl font-black text-red-500 tracking-tight">--</span>
-              <span class="text-[10px] font-bold text-red-400">BPM</span>
-            </div>
-            <div class="text-right">
-              <span id="hudGradient" class="text-2xl md:text-3xl font-black text-amber-400 tracking-tight">0.0%</span>
-              <span class="text-[10px] font-bold text-amber-400">GRADE</span>
-            </div>
-          </div>
-          <div class="mt-1 text-[11px] text-slate-300 flex justify-between">
-            <span>Zone: <strong id="hudHrZone" class="text-slate-400">--</strong></span>
-            <span>Elev: <strong id="hudElevation" class="text-white">0 m</strong></span>
-          </div>
-        </div>
-
-        <!-- ROUTE PROGRESS -->
-        <div class="glass-panel p-2.5 rounded-xl border-l-4 border-zwift-green pointer-events-auto shadow-2xl">
-          <div class="text-[10px] font-bold text-slate-400 tracking-wider uppercase flex justify-between">
-            <span>ROUTE PROGRESS</span>
-            <i class="fa-solid fa-flag-checkered text-zwift-green"></i>
-          </div>
-          <div class="flex items-baseline justify-between mt-0.5">
-            <div>
-              <span id="hudDistance" class="text-2xl md:text-3xl font-black text-white tracking-tight">0.00</span>
-              <span class="text-[10px] font-bold text-zwift-green">KM</span>
-            </div>
-            <div class="text-right">
-              <span id="hudTime" class="text-2xl md:text-3xl font-black text-slate-200 tracking-tight">00:00</span>
-              <span class="text-[10px] font-bold text-slate-400">TIME</span>
-            </div>
-          </div>
-          <div class="mt-1 text-[11px] text-slate-300 flex justify-between">
-            <span>Remaining: <strong id="hudDistRemaining" class="text-white">0.0 km</strong></span>
-            <span>Climb: <strong id="hudElevGain" class="text-white">0 m</strong></span>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- Zwift Action Controls Overlay (Bottom) -->
-      <div class="absolute bottom-16 md:bottom-20 left-3 right-3 z-10 flex flex-col md:flex-row gap-2 justify-between items-stretch pointer-events-none">
-        
-        <!-- Target Power Quick Presets -->
-        <div class="glass-panel p-2 rounded-xl flex items-center gap-1.5 pointer-events-auto overflow-x-auto shadow-2xl border-zwift-orange/30">
-          <span class="text-[10px] font-black text-zwift-orange px-2 tracking-wider">TARGET WATT</span>
-          <button onclick="setTargetPower(120)" class="px-3 py-1.5 bg-slate-800 hover:bg-zwift-orange hover:text-white rounded-lg text-xs font-bold text-slate-200 transition border border-slate-700">120W</button>
-          <button onclick="setTargetPower(180)" class="px-3 py-1.5 bg-slate-800 hover:bg-zwift-orange hover:text-white rounded-lg text-xs font-bold text-slate-200 transition border border-slate-700">180W</button>
-          <button onclick="setTargetPower(250)" class="px-3 py-1.5 bg-slate-800 hover:bg-zwift-orange hover:text-white rounded-lg text-xs font-bold text-slate-200 transition border border-slate-700">250W</button>
-          <button onclick="setTargetPower(350)" class="px-3 py-1.5 bg-slate-800 hover:bg-zwift-orange hover:text-white rounded-lg text-xs font-bold text-slate-200 transition border border-slate-700">350W</button>
-          <button onclick="toggleErgMode()" id="btnErgToggle" class="px-3 py-1.5 bg-zwift-blue text-slate-950 rounded-lg text-xs font-black hover:opacity-90 transition ml-1">ERG: ON</button>
-        </div>
-
-        <!-- Virtual Gear Shifting Buttons -->
-        <div class="glass-panel p-2 rounded-xl flex items-center gap-2 pointer-events-auto shadow-2xl border-zwift-blue/30 justify-center">
-          <span class="text-[10px] font-black text-zwift-blue px-1 tracking-wider">GEAR</span>
-          <button onclick="shiftGear(-1)" class="w-9 h-9 bg-slate-800 hover:bg-slate-700 active:bg-zwift-blue text-white rounded-lg font-black text-lg flex items-center justify-center border border-slate-700 transition">
-            <i class="fa-solid fa-minus"></i>
-          </button>
-          <div class="text-center px-2">
-            <span id="gearDisplay" class="text-lg font-black text-zwift-blue">G7</span>
-          </div>
-          <button onclick="shiftGear(1)" class="w-9 h-9 bg-slate-800 hover:bg-slate-700 active:bg-zwift-blue text-white rounded-lg font-black text-lg flex items-center justify-center border border-slate-700 transition">
-            <i class="fa-solid fa-plus"></i>
-          </button>
-        </div>
-
-        <!-- Start / Pause / Finish Controls -->
-        <div class="glass-panel p-2 rounded-xl flex items-center gap-2 pointer-events-auto justify-center shadow-2xl">
-          <button id="btnStartRide" onclick="toggleRideState()" class="px-5 py-2 bg-gradient-to-r from-zwift-orange to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black text-sm rounded-lg shadow-lg flex items-center gap-2 transition glow-orange">
-            <i id="btnStartIcon" class="fa-solid fa-play"></i>
-            <span id="btnStartText">START RIDE</span>
-          </button>
-          <button onclick="finishRide()" class="px-4 py-2 bg-slate-800 hover:bg-red-600 text-slate-300 hover:text-white font-bold text-xs rounded-lg transition border border-slate-700 flex items-center gap-1.5">
-            <i class="fa-solid fa-flag-checkered"></i>
-            <span>FINISH</span>
-          </button>
-        </div>
-
-      </div>
-
-      <!-- Elevation Profile Mini Overlay Canvas -->
-      <div class="h-16 bg-slate-950/95 border-t border-slate-800 relative z-10 px-2 pt-1 flex flex-col justify-end">
-        <canvas id="elevationCanvas" class="w-full h-11 block cursor-pointer"></canvas>
-        <div class="flex justify-between text-[9px] text-slate-400 px-1 pb-0.5">
-          <span>0.0 km</span>
-          <span id="elevProfileMid">-- km</span>
-          <span id="elevProfileMax">-- km</span>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- Sidebar Control Panel -->
-    <div class="w-full md:w-80 bg-slate-900 border-t md:border-t-0 md:border-l border-slate-800 p-4 flex flex-col gap-4 overflow-y-auto z-20">
-      
-      <!-- Route Selector Box -->
-      <div class="bg-slate-950/70 p-3 rounded-xl border border-slate-800">
-        <h3 class="text-xs font-black text-zwift-orange tracking-wider uppercase mb-2 flex items-center gap-1.5">
-          <i class="fa-solid fa-map-location-dot"></i> Preset & Custom Routes
-        </h3>
-
-        <div class="mb-2">
-          <label class="block text-[10px] text-slate-400 mb-1 font-semibold">Select Route Preset</label>
-          <select id="routePresetSelect" onchange="changeRoutePreset(this.value)" class="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-slate-100 font-bold text-xs outline-none focus:border-zwift-orange">
-            <option value="gillnetter">Gillnetter (Default - Port Coquitlam)</option>
-          </select>
-        </div>
-
-        <label class="w-full py-2 px-3 bg-slate-800/80 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold border border-slate-700 border-dashed flex items-center justify-center gap-2 cursor-pointer transition">
-          <i class="fa-solid fa-file-arrow-up text-zwift-blue"></i>
-          <span>Upload Custom .GPX File</span>
-          <input type="file" id="gpxFileInput" accept=".gpx" class="hidden" onchange="handleGpxUpload(event)">
-        </label>
-      </div>
-
-      <!-- Fallback Simulation Box -->
-      <div class="bg-slate-950/70 p-3 rounded-xl border border-slate-800">
-        <div class="flex items-center justify-between mb-2">
-          <h3 class="text-xs font-black text-zwift-blue tracking-wider uppercase flex items-center gap-1.5">
-            <i class="fa-solid fa-sliders"></i> Trainer Fallback Mode
-          </h3>
-          <span id="simBadge" class="text-[9px] bg-emerald-950 text-emerald-400 border border-emerald-800 px-1.5 py-0.5 rounded font-bold">Fallback Active</span>
-        </div>
-
-        <p class="text-[11px] text-slate-400 mb-3 leading-relaxed">
-          When no FTMS trainer is paired, pedal virtually using the slider or keyboard <kbd class="px-1 bg-slate-800 rounded border border-slate-700 text-white">Space</kbd> / <kbd class="px-1 bg-slate-800 rounded border border-slate-700 text-white">▲</kbd> keys.
-        </p>
-
-        <!-- Simulated Watt Slider -->
-        <div class="mb-3">
-          <div class="flex justify-between text-xs font-bold mb-1">
-            <span class="text-slate-300">Simulated Pedal Effort:</span>
-            <span id="simEffortVal" class="text-zwift-orange font-black">200 W</span>
-          </div>
-          <input type="range" id="simEffortSlider" min="50" max="500" value="200" oninput="updateSimEffort(this.value)" class="w-full accent-zwift-orange bg-slate-800 rounded-lg h-2 cursor-pointer">
-        </div>
-
-        <!-- Rider Wt & Bike Wt -->
-        <div class="grid grid-cols-2 gap-2 text-xs">
-          <div>
-            <label class="block text-slate-400 text-[10px] mb-1 font-semibold">Rider Wt (kg)</label>
-            <input type="number" id="riderWeightInput" value="75" min="40" max="150" class="w-full bg-slate-900 border border-slate-800 rounded p-1.5 text-slate-200 font-bold focus:border-zwift-blue outline-none" onchange="updatePhysicsParams()">
-          </div>
-          <div>
-            <label class="block text-slate-400 text-[10px] mb-1 font-semibold">Bike Wt (kg)</label>
-            <input type="number" id="bikeWeightInput" value="9" min="5" max="25" class="w-full bg-slate-900 border border-slate-800 rounded p-1.5 text-slate-200 font-bold focus:border-zwift-blue outline-none" onchange="updatePhysicsParams()">
-          </div>
-        </div>
-      </div>
-
-      <!-- Course Specs -->
-      <div class="bg-slate-950/70 p-3 rounded-xl border border-slate-800 text-xs flex-1 flex flex-col justify-between">
-        <div>
-          <h3 class="font-black text-slate-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-            <i class="fa-solid fa-chart-line text-zwift-orange"></i> Track Profile Specs
-          </h3>
-          <div class="space-y-1.5 text-slate-400">
-            <div class="flex justify-between py-1 border-b border-slate-800/60">
-              <span>Total Distance:</span>
-              <strong id="statTotalDist" class="text-slate-200">-- km</strong>
-            </div>
-            <div class="flex justify-between py-1 border-b border-slate-800/60">
-              <span>Elev Gain:</span>
-              <strong id="statElevGain" class="text-slate-200">-- m</strong>
-            </div>
-            <div class="flex justify-between py-1 border-b border-slate-800/60">
-              <span>Max Slope:</span>
-              <strong id="statMaxSlope" class="text-amber-400">--%</strong>
-            </div>
-            <div class="flex justify-between py-1">
-              <span>GPX Waypoints:</span>
-              <strong id="statWaypoints" class="text-slate-200">-- pts</strong>
-            </div>
-          </div>
-        </div>
-
-        <div class="mt-4 pt-3 border-t border-slate-800 text-[10px] text-slate-500 text-center">
-          Velovet Ride • API Key-Free OpenStreetMap
-        </div>
-      </div>
-
-    </div>
-  </main>
-
-  <!-- Bluetooth Diagnostics Drawer -->
-  <div id="diagDrawer" class="fixed inset-y-0 right-0 w-full max-w-md bg-slate-900/95 backdrop-blur-xl border-l border-slate-800 z-50 transform translate-x-full transition-transform duration-300 flex flex-col shadow-2xl">
-    <div class="p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
-      <div class="flex items-center gap-2 text-zwift-orange font-bold text-sm">
-        <i class="fa-solid fa-terminal"></i> BLE & FTMS Diagnostic Engine
-      </div>
-      <button onclick="toggleDiagPanel()" class="text-slate-400 hover:text-white p-1">
-        <i class="fa-solid fa-xmark text-lg"></i>
-      </button>
-    </div>
-
-    <div class="p-3 bg-slate-900 border-b border-slate-800 text-xs space-y-1">
-      <div class="flex justify-between">
-        <span class="text-slate-400">Web BLE Available:</span>
-        <strong id="diagBleSupport" class="text-emerald-400">Checking...</strong>
-      </div>
-      <div class="flex justify-between">
-        <span class="text-slate-400">Frame Permission:</span>
-        <strong id="diagIframePermission" class="text-emerald-400">Allowed</strong>
-      </div>
-      <div class="flex justify-between">
-        <span class="text-slate-400">FTMS Trainer Status:</span>
-        <strong id="diagFtmsStatus" class="text-red-400">False</strong>
-      </div>
-      <div class="flex justify-between">
-        <span class="text-slate-400">Tacx/Garmin Mode:</span>
-        <strong id="diagTacxMode" class="text-slate-400">Standard FTMS</strong>
-      </div>
-    </div>
-
-    <div class="flex-1 p-3 font-mono text-[11px] bg-slate-950 overflow-y-auto text-slate-300 space-y-1" id="diagConsoleLogs">
-      <div class="text-slate-500">[00:00:00] Initialized Velovet Ride diagnostic console...</div>
-    </div>
-
-    <div class="p-3 bg-slate-900 border-t border-slate-800 flex gap-2">
-      <button onclick="clearDiagLogs()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 rounded border border-slate-700">Clear Logs</button>
-      <button onclick="retryFtmsControlPoint()" class="flex-1 px-3 py-1.5 bg-zwift-orange hover:bg-orange-600 text-xs font-bold text-white rounded transition">Force Request Control (0x00)</button>
-    </div>
-  </div>
-
-  <!-- Leaderboard Modal -->
-  <div id="leaderboardModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
-    <div class="bg-slate-900 border border-slate-800 w-full max-w-2xl rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
-      <div class="p-4 bg-slate-950 border-b border-slate-800 flex justify-between items-center">
-        <div class="flex items-center gap-2 text-zwift-orange font-black text-lg">
-          <i class="fa-solid fa-trophy"></i> VELOVET CLUB LEADERBOARD
-        </div>
-        <button onclick="closeLeaderboard()" class="text-slate-400 hover:text-white p-1">
-          <i class="fa-solid fa-xmark text-xl"></i>
-        </button>
-      </div>
-
-      <div class="p-4 flex-1 overflow-y-auto">
-        <table class="w-full text-left text-xs text-slate-300">
-          <thead class="bg-slate-950/80 text-slate-400 uppercase text-[10px] tracking-wider">
-            <tr>
-              <th class="p-2.5">Rider Name</th>
-              <th class="p-2.5">Date</th>
-              <th class="p-2.5">Dist (km)</th>
-              <th class="p-2.5">Time</th>
-              <th class="p-2.5">Avg Watts</th>
-              <th class="p-2.5">Avg Speed</th>
-              <th class="p-2.5">Elev (m)</th>
-            </tr>
-          </thead>
-          <tbody id="leaderboardTbody" class="divide-y divide-slate-800/60">
-          </tbody>
-        </table>
-      </div>
-
-      <div class="p-3 bg-slate-950 border-t border-slate-800 flex justify-between items-center">
-        <button onclick="clearLeaderboard()" class="text-xs text-red-400 hover:text-red-300">Clear Leaderboard</button>
-        <button onclick="closeLeaderboard()" class="px-4 py-2 bg-zwift-orange text-white text-xs font-bold rounded-lg hover:bg-orange-600 transition">Close</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Ride Summary Modal -->
-  <div id="summaryModal" class="fixed inset-0 bg-black/85 backdrop-blur-lg z-50 hidden flex items-center justify-center p-4">
-    <div class="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl p-5 shadow-2xl space-y-4">
-      <div class="text-center">
-        <div class="w-12 h-12 bg-zwift-orange/20 text-zwift-orange rounded-full flex items-center justify-center mx-auto mb-2 text-2xl font-black">
-          <i class="fa-solid fa-circle-check"></i>
-        </div>
-        <h2 class="text-xl font-black text-white">RIDE COMPLETED!</h2>
-        <p class="text-xs text-slate-400">Awesome effort! Save your ride stats to the Velovet Leaderboard.</p>
-      </div>
-
-      <div>
-        <label class="block text-xs font-bold text-slate-300 mb-1">Rider Name / Club Member ID</label>
-        <input type="text" id="riderNameInput" value="Keith Stoner" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-100 font-bold text-sm focus:border-zwift-orange outline-none">
-      </div>
-
-      <div class="grid grid-cols-2 gap-2 bg-slate-950 p-3 rounded-xl border border-slate-800/80 text-xs">
-        <div><span class="text-slate-400">Distance:</span> <strong id="sumDist" class="text-white font-bold">0 km</strong></div>
-        <div><span class="text-slate-400">Time:</span> <strong id="sumTime" class="text-white font-bold">00:00</strong></div>
-        <div><span class="text-slate-400">Avg Power:</span> <strong id="sumAvgPower" class="text-zwift-orange font-bold">0 W</strong></div>
-        <div><span class="text-slate-400">Max Power:</span> <strong id="sumMaxPower" class="text-zwift-orange font-bold">0 W</strong></div>
-        <div><span class="text-slate-400">Avg Speed:</span> <strong id="sumAvgSpeed" class="text-zwift-blue font-bold">0 km/h</strong></div>
-        <div><span class="text-slate-400">Elev Gain:</span> <strong id="sumElev" class="text-emerald-400 font-bold">0 m</strong></div>
-      </div>
-
-      <div class="flex gap-2">
-        <button onclick="discardRideSummary()" class="w-1/3 py-2 bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-bold rounded-lg transition">Discard</button>
-        <button onclick="saveRideSummary()" class="w-2/3 py-2 bg-zwift-orange hover:bg-orange-600 text-white text-xs font-black rounded-lg transition shadow-lg glow-orange">SAVE TO LEADERBOARD</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- APPLICATION LOGIC ENGINE -->
-  <script>
-    /* ==========================================================================
-       1. EMBEDDED GILLNETTER GPX DATA (DEFAULT STARTUP ROUTE)
-       ========================================================================== */
-    const GILLNETTER_RAW_COORDS = [
-      [49.23517, -122.76760, 7.64], [49.23543, -122.76702, 7.58], [49.23569, -122.76644, 7.72],
-      [49.23580, -122.76595, 7.69], [49.23589, -122.76497, 7.45], [49.23606, -122.76415, 7.49],
-      [49.23624, -122.76333, 7.36], [49.23640, -122.76286, 7.40], [49.23677, -122.76215, 7.43],
-      [49.23717, -122.76146, 7.36], [49.23757, -122.76077, 7.40], [49.23805, -122.75996, 7.22],
-      [49.23853, -122.75914, 7.28], [49.23901, -122.75832, 7.23], [49.23933, -122.75777, 7.24],
-      [49.23966, -122.75722, 7.19], [49.24018, -122.75612, 7.09], [49.24071, -122.75502, 7.08],
-      [49.24124, -122.75392, 7.32], [49.24149, -122.75345, 7.33], [49.24185, -122.75256, 7.21],
-      [49.24222, -122.75167, 7.24], [49.24259, -122.75078, 7.14], [49.24291, -122.74995, 7.06],
-      [49.24327, -122.74903, 7.10], [49.24363, -122.74811, 7.09], [49.24399, -122.74719, 7.18],
-      [49.24435, -122.74631, 7.08], [49.24472, -122.74544, 7.13], [49.24509, -122.74457, 7.20],
-      [49.24556, -122.74307, 7.07], [49.24590, -122.74196, 6.94], [49.24620, -122.74021, 6.84],
-      [49.24632, -122.73910, 6.76], [49.24666, -122.73837, 5.15], [49.24692, -122.73877, 4.24],
-      [49.24729, -122.73982, 4.18], [49.24706, -122.74062, 4.41], [49.24678, -122.74230, 4.85],
-      [49.24723, -122.74124, 2.85], [49.24788, -122.73991, 0.94], [49.24832, -122.73928, 1.80],
-      [49.24882, -122.73874, 3.76], [49.24937, -122.73774, 4.38], [49.24939, -122.73610, 4.19],
-      [49.24821, -122.73549, 3.85], [49.24805, -122.73388, 6.25], [49.24860, -122.73286, 7.20],
-      [49.24894, -122.73166, 7.04], [49.24957, -122.73153, 7.20], [49.25042, -122.73055, 7.09],
-      [49.25010, -122.73148, 6.70], [49.25038, -122.73282, 6.55], [49.25117, -122.73222, 6.47],
-      [49.25219, -122.73102, 6.41], [49.25296, -122.73000, 6.18], [49.25293, -122.72794, 6.34],
-      [49.25364, -122.72654, 6.44], [49.25450, -122.72556, 6.40], [49.25560, -122.72436, 6.41],
-      [49.25678, -122.72364, 6.39], [49.25822, -122.72294, 6.39], [49.26012, -122.72188, 6.52],
-      [49.26144, -122.72114, 6.61], [49.26261, -122.72048, 6.56], [49.26375, -122.71975, 6.57],
-      [49.26483, -122.71903, 6.49], [49.26611, -122.71822, 6.53], [49.26753, -122.71684, 6.49],
-      [49.26908, -122.71568, 6.59], [49.27033, -122.71490, 6.57], [49.27171, -122.71402, 6.40],
-      [49.27315, -122.71343, 6.39], [49.27469, -122.71264, 6.51], [49.27639, -122.71165, 6.47],
-      [49.27785, -122.71086, 6.47], [49.27831, -122.71062, 6.52], [49.27913, -122.71139, 6.56],
-      [49.27974, -122.71360, 6.58], [49.28071, -122.71694, 6.61], [49.28109, -122.72065, 6.62],
-      [49.28132, -122.72296, 6.73], [49.28128, -122.72623, 6.63], [49.28207, -122.72909, 6.66],
-      [49.28326, -122.72989, 6.73], [49.28471, -122.73189, 6.71], [49.28536, -122.73346, 7.04],
-      [49.28583, -122.73346, 6.30], [49.28478, -122.73093, 6.52], [49.28417, -122.72870, 6.85],
-      [49.28299, -122.72731, 6.54], [49.28228, -122.72457, 6.45], [49.28311, -122.72311, 5.82],
-      [49.28278, -122.72136, 6.02], [49.28190, -122.71914, 6.07], [49.28128, -122.71625, 5.80],
-      [49.28119, -122.71419, 6.03], [49.28041, -122.71186, 5.97], [49.27979, -122.71048, 6.00],
-      [49.28087, -122.70842, 5.87], [49.28228, -122.70663, 5.84], [49.28336, -122.70530, 5.84],
-      [49.28492, -122.70286, 6.00], [49.28610, -122.70032, 5.83], [49.28724, -122.69669, 5.90],
-      [49.28838, -122.69306, 6.12], [49.28921, -122.68966, 5.91], [49.29043, -122.68911, 5.73],
-      [49.29183, -122.68912, 5.82], [49.29312, -122.68915, 5.42], [49.29311, -122.69117, 3.51],
-      [49.29309, -122.69384, 3.75], [49.29307, -122.69785, 4.05], [49.29305, -122.70186, 4.14],
-      [49.29304, -122.70454, 4.22], [49.29302, -122.70707, 4.15], [49.29299, -122.71085, 4.24],
-      [49.29297, -122.71463, 6.03], [49.29295, -122.71842, 6.59], [49.29251, -122.71975, 6.62],
-      [49.29103, -122.72124, 6.40], [49.28926, -122.72306, 6.38], [49.28851, -122.72436, 6.51],
-      [49.28884, -122.72642, 6.48], [49.28876, -122.72840, 6.42], [49.28834, -122.73018, 6.62],
-      [49.28744, -122.73152, 6.26], [49.28611, -122.73315, 6.30], [49.28538, -122.73388, 7.04],
-      [49.28474, -122.73549, 8.51], [49.28373, -122.73712, 7.11], [49.28283, -122.73844, 7.41],
-      [49.28237, -122.74036, 7.56], [49.28221, -122.74220, 8.10], [49.28187, -122.74554, 10.19],
-      [49.28099, -122.74691, 10.77], [49.27951, -122.74818, 10.81], [49.27821, -122.74928, 11.52],
-      [49.27679, -122.75057, 12.94], [49.27583, -122.75140, 13.67], [49.27554, -122.75225, 13.85],
-      [49.27577, -122.75393, 14.81], [49.27655, -122.75484, 15.28], [49.27657, -122.75780, 15.77],
-      [49.27656, -122.76034, 17.61], [49.27679, -122.76238, 18.81], [49.27749, -122.76440, 20.55],
-      [49.27826, -122.76520, 24.33], [49.27838, -122.76716, 22.76], [49.27869, -122.76873, 23.44],
-      [49.27865, -122.77025, 23.84], [49.27947, -122.77046, 24.75], [49.27986, -122.77146, 25.18],
-      [49.28012, -122.77227, 25.43], [49.27978, -122.77275, 22.44], [49.27941, -122.77350, 22.15],
-      [49.27977, -122.77460, 24.70], [49.28011, -122.77554, 24.13], [49.27888, -122.77437, 21.38],
-      [49.27842, -122.77490, 21.40], [49.27788, -122.77558, 20.42], [49.27731, -122.77607, 18.06], [49.27655, -122.77603, 17.59],
-      [49.27541, -122.77613, 15.26], [49.27426, -122.77625, 14.51], [49.27377, -122.77589, 16.99],
-      [49.27299, -122.77635, 16.12], [49.27188, -122.77773, 15.83], [49.27060, -122.77848, 15.45],
-      [49.26914, -122.77935, 14.45], [49.26818, -122.78014, 12.95], [49.26687, -122.78029, 12.53],
-      [49.26533, -122.78158, 9.86],  [49.26423, -122.78280, 11.04], [49.26316, -122.78433, 10.73],
-      [49.26220, -122.78562, 10.53], [49.26133, -122.78879, 10.08], [49.26066, -122.79108, 9.88],
-      [49.26017, -122.79452, 9.60],  [49.25911, -122.79554, 9.35],  [49.25838, -122.79446, 9.21],
-      [49.25775, -122.79196, 9.19],  [49.25639, -122.79233, 8.90],  [49.25515, -122.79304, 8.71],
-      [49.25400, -122.79265, 8.41],  [49.25264, -122.79358, 8.47],  [49.25186, -122.79484, 8.10],
-      [49.25086, -122.79635, 11.09], [49.25008, -122.79838, 8.11],  [49.25030, -122.80003, 7.14],
-      [49.24966, -122.80096, 6.06],  [49.24827, -122.80129, 5.92],  [49.24730, -122.80181, 5.87],
-      [49.24638, -122.80260, 5.57],  [49.24512, -122.80329, 5.77],  [49.24381, -122.80455, 5.50],
-      [49.24290, -122.80463, 5.60],  [49.24199, -122.80661, 5.69],  [49.24107, -122.80732, 5.54],
-      [49.23987, -122.80773, 5.50],  [49.23848, -122.80823, 5.51],  [49.23717, -122.80794, 5.40],
-      [49.23608, -122.80612, 5.31],  [49.23573, -122.80339, 5.14],  [49.23516, -122.80137, 5.10],
-      [49.23412, -122.80133, 4.78],  [49.23320, -122.80198, 5.43],  [49.23241, -122.80123, 5.22],
-      [49.23098, -122.80239, 5.78],  [49.22983, -122.80334, 5.97],  [49.22926, -122.80307, 6.00],
-      [49.22916, -122.80204, 4.99],  [49.22872, -122.80021, 4.75],  [49.22828, -122.79827, 4.71],
-      [49.22809, -122.79615, 4.82],  [49.22751, -122.79568, 6.78],  [49.22693, -122.79580, 7.14],
-      [49.22661, -122.79412, 7.05],  [49.22671, -122.79035, 7.19],  [49.22727, -122.78586, 7.69],
-      [49.22767, -122.78422, 7.74],  [49.22792, -122.78061, 7.18],  [49.22845, -122.77729, 7.27],
-      [49.22890, -122.77512, 7.93],  [49.22960, -122.77365, 9.42],  [49.23051, -122.77289, 10.99],
-      [49.23148, -122.77258, 9.84],  [49.23315, -122.77072, 6.88],  [49.23409, -122.76935, 7.62],
-      [49.23477, -122.76843, 7.61],  [49.23499, -122.76800, 7.61]
-    ];
-
-    /* ==========================================================================
-       2. GLOBAL STATE & BLE CONSTANTS
-       ========================================================================== */
-    const FTMS_SERVICE_UUID = '00001826-0000-1000-8000-00805f9b34fb';
-    const FTMS_CONTROL_POINT_UUID = '00002ad9-0000-1000-8000-00805f9b34fb';
-    const FTMS_INDOOR_BIKE_DATA_UUID = '00002ad2-0000-1000-8000-00805f9b34fb';
-
-    const HR_SERVICE_UUID = '0000180d-0000-1000-8000-00805f9b34fb';
-    const HR_MEASURE_UUID = '00002a37-0000-1000-8000-00805f9b34fb';
-
-    let map = null;
-    let routePolyline = null;
-    let riderMarker = null;
-    let gpxPoints = [];
-
-    let isRiding = false;
-    let rideInterval = null;
-    let elapsedSeconds = 0;
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Velovet Ride</title>
+    <!-- Tailwind CSS for crisp, uncluttered UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet JS & CSS for OpenStreetMap -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
-    let currentDistKm = 0;
-    let currentPower = 0;
-    let currentCadence = 0;
-    let currentSpeedKmH = 0;
-    let currentHr = 0;
-    let currentGradient = 0;
-    let currentElevation = 0;
-    let virtualGear = 7;
-    let targetPower = 180;
-    let isErgMode = true;
-
-    let powerSamples = [];
-    let speedSamples = [];
-    let hrSamples = [];
-    let maxPowerRecorded = 0;
-    let totalElevGain = 0;
-
-    let ftmsDevice = null;
-    let ftmsServer = null;
-    let ftmsControlPointChar = null;
-    let hrDevice = null;
-
-    let riderWeight = 75;
-    let bikeWeight = 9;
-    let simEffortWatt = 200;
-
-    /* ==========================================================================
-       3. INITIALIZATION & ROUTE LOADING
-       ========================================================================== */
-    window.onload = function() {
-      initMap();
-      checkBlePermissions();
-      loadDefaultGillnetterRoute();
-      setupKeyboardControls();
-      setupAudioCues();
-    };
-
-    function initMap() {
-      map = L.map('map', {
-        zoomControl: false,
-        attributionControl: false
-      }).setView([49.23517, -122.76760], 13);
-
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19
-      }).addTo(map);
-
-      L.control.zoom({ position: 'bottomright' }).addTo(map);
-    }
-
-    function loadDefaultGillnetterRoute() {
-      document.getElementById('routeTitleHeader').innerText = "Gillnetter Route (Port Coquitlam)";
-      logDiag("Loading default embedded Gillnetter GPX route...");
-
-      gpxPoints = [];
-      let accumDist = 0;
-
-      for (let i = 0; i < GILLNETTER_RAW_COORDS.length; i++) {
-        const pt = GILLNETTER_RAW_COORDS[i];
-        const lat = pt[0];
-        const lng = pt[1];
-        const ele = pt[2];
-
-        if (i > 0) {
-          const prev = GILLNETTER_RAW_COORDS[i - 1];
-          accumDist += haversineDistance(prev[0], prev[1], lat, lng);
-        }
-
-        gpxPoints.push({ lat, lng, ele, dist: accumDist });
-      }
-
-      processGpxData();
-    }
-
-    function changeRoutePreset(val) {
-      if (val === 'gillnetter') {
-        loadDefaultGillnetterRoute();
-      }
-    }
-
-    function handleGpxUpload(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        parseGpxText(e.target.result, file.name);
-      };
-      reader.readAsText(file);
-    }
-
-    function parseGpxText(xmlText, fileName) {
-      try {
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(xmlText, "text/xml");
-        const trkpts = xmlDoc.querySelectorAll("trkpt, rtept");
-
-        if (trkpts.length === 0) {
-          alert("No track points found in uploaded GPX.");
-          return;
-        }
-
-        gpxPoints = [];
-        let totalDist = 0;
-
-        for (let i = 0; i < trkpts.length; i++) {
-          const pt = trkpts[i];
-          const lat = parseFloat(pt.getAttribute("lat"));
-          const lng = parseFloat(pt.getAttribute("lon"));
-          const eleEl = pt.querySelector("ele");
-          const ele = eleEl ? parseFloat(eleEl.textContent) : 0;
-
-          if (i > 0) {
-            const prev = gpxPoints[i - 1];
-            totalDist += haversineDistance(prev.lat, prev.lng, lat, lng);
-          }
-
-          gpxPoints.push({ lat, lng, ele, dist: totalDist });
-        }
-
-        document.getElementById('routeTitleHeader').innerText = fileName.replace('.gpx', '');
-        logDiag(`Imported GPX: ${fileName} (${gpxPoints.length} pts, ${totalDist.toFixed(2)} km)`);
-        processGpxData();
-      } catch (err) {
-        alert("GPX parse error: " + err.message);
-      }
-    }
-
-    function processGpxData() {
-      if (gpxPoints.length === 0) return;
-
-      const latLngs = gpxPoints.map(p => [p.lat, p.lng]);
-
-      if (routePolyline) map.removeLayer(routePolyline);
-      routePolyline = L.polyline(latLngs, {
-        color: '#FF5500',
-        weight: 5,
-        opacity: 0.9,
-        lineCap: 'round'
-      }).addTo(map);
-
-      map.fitBounds(routePolyline.getBounds(), { padding: [30, 30] });
-
-      const riderIcon = L.divIcon({
-        className: 'custom-rider-marker',
-        html: `<div class="w-7 h-7 rounded-full bg-zwift-blue border-2 border-white flex items-center justify-center text-slate-950 font-black text-xs shadow-2xl pulse-ring">
-                 <i class="fa-solid fa-person-biking"></i>
-               </div>`,
-        iconSize: [28, 28],
-        iconAnchor: [14, 14]
-      });
-
-      if (riderMarker) map.removeLayer(riderMarker);
-      riderMarker = L.marker([gpxPoints[0].lat, gpxPoints[0].lng], { icon: riderIcon }).addTo(map);
-
-      currentDistKm = 0;
-      const maxDist = gpxPoints[gpxPoints.length - 1].dist;
-      document.getElementById('statTotalDist').innerText = maxDist.toFixed(2) + " km";
-      document.getElementById('hudDistRemaining').innerText = maxDist.toFixed(2) + " km";
-      document.getElementById('statWaypoints').innerText = gpxPoints.length + " pts";
-
-      let elevGain = 0;
-      let maxSlope = 0;
-      for (let i = 1; i < gpxPoints.length; i++) {
-        const dElev = gpxPoints[i].ele - gpxPoints[i-1].ele;
-        if (dElev > 0) elevGain += dElev;
-
-        const dDist = (gpxPoints[i].dist - gpxPoints[i-1].dist) * 1000;
-        if (dDist > 5) {
-          const slope = (dElev / dDist) * 100;
-          if (slope > maxSlope) maxSlope = slope;
-        }
-      }
-      totalElevGain = elevGain;
-      document.getElementById('statElevGain').innerText = "+" + Math.round(elevGain) + " m";
-      document.getElementById('statMaxSlope').innerText = maxSlope.toFixed(1) + "%";
-
-      document.getElementById('elevProfileMid').innerText = (maxDist / 2).toFixed(1) + " km";
-      document.getElementById('elevProfileMax').innerText = maxDist.toFixed(1) + " km";
-
-      renderElevationGraph();
-    }
-
-    function haversineDistance(lat1, lon1, lat2, lon2) {
-      const R = 6371;
-      const dLat = (lat2 - lat1) * Math.PI / 180;
-      const dLon = (lon2 - lon1) * Math.PI / 180;
-      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                Math.sin(dLon / 2) * Math.sin(dLon / 2);
-      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    }
-
-    /* ==========================================================================
-       4. BLUETOOTH FTMS SMART TRAINER (Tacx Neo / Wahoo / Garmin FTMS)
-       ========================================================================== */
-    async function toggleTrainerConnection() {
-      if (ftmsDevice && ftmsDevice.gatt.connected) {
-        ftmsDevice.gatt.disconnect();
-        updateTrainerUiStatus(false);
-        logDiag("FTMS Trainer disconnected.");
-        return;
-      }
-
-      try {
-        logDiag("Requesting Bluetooth FTMS device...");
-        ftmsDevice = await navigator.bluetooth.requestDevice({
-          filters: [{ services: [FTMS_SERVICE_UUID] }],
-          optionalServices: [FTMS_SERVICE_UUID]
-        });
-
-        ftmsDevice.addEventListener('gattserverdisconnected', onFtmsDisconnected);
-        logDiag(`Connecting GATT to ${ftmsDevice.name}...`);
-        ftmsServer = await ftmsDevice.gatt.connect();
-
-        const service = await ftmsServer.getPrimaryService(FTMS_SERVICE_UUID);
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #111; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; z-index: 1; }
+        .ui-layer { position: absolute; z-index: 10; pointer-events: none; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: space-between; }
+        .interactive { pointer-events: auto; }
+        .glass-panel { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; }
         
-        const bikeDataChar = await service.getCharacteristic(FTMS_INDOOR_BIKE_DATA_UUID);
-        await bikeDataChar.startNotifications();
-        bikeDataChar.addEventListener('characteristicvaluechanged', handleIndoorBikeData);
+        /* Custom map tile styling to look slightly darker/Zwift-like */
+        .leaflet-layer,
+        .leaflet-control-zoom-in,
+        .leaflet-control-zoom-out,
+        .leaflet-control-attribution { filter: invert(90%) hue-rotate(180deg) brightness(95%) contrast(85%); }
+    </style>
+</head>
+<body class="text-white">
 
-        ftmsControlPointChar = await service.getCharacteristic(FTMS_CONTROL_POINT_UUID);
-        await ftmsControlPointChar.startNotifications();
+    <!-- iOS BLE Warning Banner -->
+    <div id="ios-banner" class="w-full bg-yellow-500 text-black text-center py-1.5 text-xs sm:text-sm font-bold absolute top-0 z-50 interactive shadow-md hidden">
+        ⚠️ Apple blocks Web Bluetooth on Safari for iOS. Bluefy Web BLE Browser or WebBLE are strictly required for smart trainer connectivity.
+    </div>
 
-        await requestFtmsControl();
-        updateTrainerUiStatus(true, ftmsDevice.name);
-        document.getElementById('diagTacxMode').innerText = "FTMS Active";
-        logDiag(`Connected FTMS Trainer: ${ftmsDevice.name}`);
+    <!-- Map Container -->
+    <div id="map"></div>
 
-      } catch (err) {
-        logDiag(`BLE Connection Error: ${err.message}`);
-        alert("Bluetooth Error: " + err.message);
-        updateTrainerUiStatus(false);
-      }
-    }
-
-    async function requestFtmsControl() {
-      if (!ftmsControlPointChar) return;
-      try {
-        logDiag("Sending FTMS Request Control Byte [0x00]");
-        await ftmsControlPointChar.writeValue(new Uint8Array([0x00]));
-      } catch (err) {
-        logDiag(`FTMS Request Control warning: ${err.message}`);
-      }
-    }
-
-    async function sendFtmsSimulationParameters(gradePercent) {
-      if (!ftmsControlPointChar || !ftmsServer || !ftmsServer.connected) return;
-
-      try {
-        const gradeInt = Math.round(gradePercent * 100);
-        const buffer = new ArrayBuffer(7);
-        const view = new DataView(buffer);
-
-        view.setUint8(0, 0x07);
-        view.setInt16(1, 0, true);
-        view.setInt16(3, gradeInt, true);
-        view.setUint8(5, 0x33);
-        view.setUint8(6, 0x33);
-
-        await ftmsControlPointChar.writeValue(buffer);
-      } catch (err) {
-        logDiag(`FTMS Resistance error: ${err.message}`);
-      }
-    }
-
-    async function sendFtmsTargetPower(watts) {
-      if (!ftmsControlPointChar || !ftmsServer || !ftmsServer.connected) return;
-
-      try {
-        const buffer = new ArrayBuffer(3);
-        const view = new DataView(buffer);
-        view.setUint8(0, 0x05);
-        view.setInt16(1, watts, true);
-
-        await ftmsControlPointChar.writeValue(buffer);
-      } catch (err) {
-        logDiag(`FTMS ERG Power error: ${err.message}`);
-      }
-    }
-
-    function handleIndoorBikeData(event) {
-      const data = event.target.value;
-      const flags = data.getUint16(0, true);
-      let offset = 2;
-
-      if ((flags & 0x01) === 0) {
-        const rawSpeed = data.getUint16(offset, true);
-        currentSpeedKmH = rawSpeed * 0.01;
-        offset += 2;
-      }
-
-      if (flags & 0x04) {
-        const rawCadence = data.getUint16(offset, true);
-        currentCadence = Math.round(rawCadence * 0.5);
-        offset += 2;
-      }
-
-      if (flags & 0x40) {
-        currentPower = data.getInt16(offset, true);
-        offset += 2;
-      }
-
-      updateHudValues();
-    }
-
-    function onFtmsDisconnected() {
-      logDiag("FTMS Smart Trainer Disconnected!");
-      updateTrainerUiStatus(false);
-    }
-
-    function updateTrainerUiStatus(connected, name = '') {
-      const text = document.getElementById('trainerStatusText');
-      const icon = document.getElementById('trainerStatusIcon');
-      const btn = document.getElementById('btnTrainerConnect');
-
-      if (connected) {
-        text.innerText = `Trainer: ${name || 'Connected'}`;
-        icon.className = "fa-solid fa-bicycle text-zwift-green";
-        btn.className = "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition bg-emerald-950 text-emerald-300 border border-emerald-700";
-        document.getElementById('simBadge').innerText = "Trainer Active";
-        document.getElementById('simBadge').className = "text-[9px] bg-zwift-orange/20 text-zwift-orange border border-zwift-orange/40 px-1.5 py-0.5 rounded font-bold";
-      } else {
-        text.innerText = "Trainer: Disconnected";
-        icon.className = "fa-solid fa-bicycle text-slate-500";
-        btn.className = "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700";
-        document.getElementById('simBadge').innerText = "Fallback Active";
-        document.getElementById('simBadge').className = "text-[9px] bg-emerald-950 text-emerald-400 border border-emerald-800 px-1.5 py-0.5 rounded font-bold";
-      }
-      document.getElementById('diagFtmsStatus').innerText = connected ? "True" : "False";
-    }
-
-    /* ==========================================================================
-       5. BLUETOOTH HEART RATE MONITOR INTEGRATION
-       ========================================================================== */
-    async function toggleHrConnection() {
-      if (hrDevice && hrDevice.gatt.connected) {
-        hrDevice.gatt.disconnect();
-        updateHrUiStatus(false);
-        return;
-      }
-
-      try {
-        logDiag("Requesting Heart Rate Monitor...");
-        hrDevice = await navigator.bluetooth.requestDevice({
-          filters: [{ services: [HR_SERVICE_UUID] }]
-        });
-
-        const server = await hrDevice.gatt.connect();
-        const service = await server.getPrimaryService(HR_SERVICE_UUID);
-        const char = await service.getCharacteristic(HR_MEASURE_UUID);
-
-        await char.startNotifications();
-        char.addEventListener('characteristicvaluechanged', handleHrData);
-
-        updateHrUiStatus(true, hrDevice.name);
-        logDiag(`Heart Rate Monitor Connected: ${hrDevice.name}`);
-      } catch (err) {
-        logDiag(`HR Error: ${err.message}`);
-        updateHrUiStatus(false);
-      }
-    }
-
-    function handleHrData(event) {
-      const data = event.target.value;
-      const flags = data.getUint8(0);
-      let hrValue = 0;
-
-      if (flags & 0x01) {
-        hrValue = data.getUint16(1, true);
-      } else {
-        hrValue = data.getUint8(1);
-      }
-
-      currentHr = hrValue;
-      updateHudValues();
-    }
-
-    function updateHrUiStatus(connected, name = '') {
-      const text = document.getElementById('hrStatusText');
-      const btn = document.getElementById('btnHrConnect');
-
-      if (connected) {
-        text.innerText = `HR: ${currentHr || '--'} BPM`;
-        btn.className = "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition bg-red-950 text-red-300 border border-red-800";
-      } else {
-        text.innerText = "HR: Disconnected";
-        btn.className = "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700";
-      }
-    }
-
-    /* ==========================================================================
-       6. RIDE TICK LOOP & PHYSICS
-       ========================================================================== */
-    function toggleRideState() {
-      if (gpxPoints.length === 0) {
-        alert("Please select a GPX route.");
-        return;
-      }
-
-      isRiding = !isRiding;
-      const btnText = document.getElementById('btnStartText');
-      const btnIcon = document.getElementById('btnStartIcon');
-      const btn = document.getElementById('btnStartRide');
-
-      if (isRiding) {
-        btnText.innerText = "PAUSE RIDE";
-        btnIcon.className = "fa-solid fa-pause";
-        btn.className = "px-5 py-2 bg-slate-800 hover:bg-slate-700 text-amber-400 font-black text-sm rounded-lg shadow-lg flex items-center gap-2 transition border border-amber-500/40";
+    <!-- UI Overlay -->
+    <div class="ui-layer p-4 pt-10">
         
-        rideInterval = setInterval(rideLoopTick, 1000);
-        logDiag("Ride started.");
-      } else {
-        btnText.innerText = "RESUME RIDE";
-        btnIcon.className = "fa-solid fa-play";
-        btn.className = "px-5 py-2 bg-gradient-to-r from-zwift-orange to-amber-500 text-white font-black text-sm rounded-lg shadow-lg flex items-center gap-2 transition glow-orange";
+        <!-- Top HUD: Live Stats -->
+        <div class="flex justify-center w-full mt-2">
+            <div class="glass-panel interactive flex space-x-6 sm:space-x-10 px-8 py-4 shadow-lg shadow-blue-900/20">
+                <div class="text-center">
+                    <div class="text-gray-400 text-xs uppercase tracking-wider">Power</div>
+                    <div class="text-4xl font-black text-blue-400 font-mono" id="stat-power">0 <span class="text-lg">W</span></div>
+                </div>
+                <div class="text-center">
+                    <div class="text-gray-400 text-xs uppercase tracking-wider">Heart Rate</div>
+                    <div class="text-4xl font-black text-red-500 font-mono" id="stat-hr">-- <span class="text-lg">bpm</span></div>
+                </div>
+                <div class="text-center">
+                    <div class="text-gray-400 text-xs uppercase tracking-wider">Speed</div>
+                    <div class="text-4xl font-black text-white font-mono" id="stat-speed">0.0 <span class="text-lg">km/h</span></div>
+                </div>
+                <div class="text-center hidden sm:block">
+                    <div class="text-gray-400 text-xs uppercase tracking-wider">Distance</div>
+                    <div class="text-4xl font-black text-white font-mono" id="stat-dist">0.0 <span class="text-lg">km</span></div>
+                </div>
+                <div class="text-center hidden sm:block">
+                    <div class="text-gray-400 text-xs uppercase tracking-wider">Grade</div>
+                    <div class="text-4xl font-black text-yellow-400 font-mono" id="stat-grade">0 <span class="text-lg">%</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Controls -->
+        <div class="flex justify-between items-end w-full pb-4">
+            
+            <!-- Left Side: Route & Connect -->
+            <div class="glass-panel interactive p-4 w-72 shadow-lg">
+                <h2 class="text-lg font-bold mb-3 border-b border-gray-600 pb-1">Velovet Setup</h2>
+                
+                <div class="flex flex-col space-y-2 mb-4">
+                    <button onclick="connectTrainer()" class="bg-blue-600 hover:bg-blue-500 text-white py-2 rounded transition font-bold text-sm">📡 Connect Smart Trainer (FTMS)</button>
+                    <button onclick="connectHR()" class="bg-red-600 hover:bg-red-500 text-white py-2 rounded transition font-bold text-sm">❤️ Connect Heart Rate</button>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-xs text-gray-400 mb-1">Load GPX Route</label>
+                    <input type="file" id="gpxInput" accept=".gpx" class="block w-full text-xs text-gray-300 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-gray-700 file:text-white hover:file:bg-gray-600" onchange="loadGPX(event)">
+                </div>
+                
+                <button onclick="toggleLeaderboard()" class="w-full bg-gray-700 hover:bg-gray-600 py-1.5 rounded text-xs">🏆 Club Leaderboard</button>
+            </div>
+
+            <!-- Right Side: Ride Controls -->
+            <div class="glass-panel interactive p-4 w-80 shadow-lg flex flex-col space-y-4">
+                <div class="flex justify-between items-center border-b border-gray-600 pb-2">
+                    <span class="text-sm font-bold uppercase tracking-wider text-gray-300">Target Power</span>
+                    <span id="target-power-display" class="font-mono text-xl text-blue-400 font-bold">Free Ride</span>
+                </div>
+                
+                <input type="range" min="50" max="600" value="150" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" id="power-slider" oninput="updateTargetPower(this.value)">
+                
+                <div class="grid grid-cols-4 gap-2">
+                    <button onclick="updateTargetPower(120)" class="bg-gray-800 hover:bg-blue-600 border border-gray-600 rounded py-1 text-xs font-bold transition">120W</button>
+                    <button onclick="updateTargetPower(180)" class="bg-gray-800 hover:bg-blue-600 border border-gray-600 rounded py-1 text-xs font-bold transition">180W</button>
+                    <button onclick="updateTargetPower(250)" class="bg-gray-800 hover:bg-blue-600 border border-gray-600 rounded py-1 text-xs font-bold transition">250W</button>
+                    <button onclick="updateTargetPower(350)" class="bg-gray-800 hover:bg-blue-600 border border-gray-600 rounded py-1 text-xs font-bold transition">350W</button>
+                </div>
+
+                <div class="flex justify-between items-center pt-2 border-t border-gray-600">
+                    <span class="text-sm font-bold uppercase tracking-wider text-gray-300">Virtual Gear</span>
+                    <div class="flex space-x-2">
+                        <button onclick="shiftGear(-1)" class="bg-gray-700 hover:bg-gray-500 w-10 h-8 rounded font-bold">-</button>
+                        <span id="gear-display" class="w-8 text-center leading-8 font-mono font-bold">1</span>
+                        <button onclick="shiftGear(1)" class="bg-gray-700 hover:bg-gray-500 w-10 h-8 rounded font-bold">+</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaderboard Modal -->
+    <div id="leaderboard-modal" class="fixed inset-0 bg-black/80 z-50 interactive hidden flex items-center justify-center backdrop-blur-sm">
+        <div class="glass-panel w-full max-w-2xl p-6 relative">
+            <button onclick="toggleLeaderboard()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-xl">&times;</button>
+            <h2 class="text-2xl font-bold mb-4 text-blue-400">Club Leaderboard</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-gray-600 text-sm uppercase text-gray-400">
+                            <th class="py-2">Rider</th>
+                            <th class="py-2">Distance</th>
+                            <th class="py-2">Avg Power</th>
+                            <th class="py-2">Time</th>
+                            <th class="py-2">Date</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboard-body" class="text-sm">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-4 flex gap-2">
+                <input type="text" id="rider-name" placeholder="Your Name" class="bg-gray-800 border border-gray-600 rounded px-3 py-1 flex-grow text-sm">
+                <button onclick="saveRide()" class="bg-blue-600 hover:bg-blue-500 px-4 py-1 rounded font-bold text-sm">Save Current Ride</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- System Setup & UI ---
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        if (isIOS) document.getElementById('ios-banner').classList.remove('hidden');
+
+        // --- Map & GPX Logic ---
+        const map = L.map('map', { zoomControl: false }).setView([49.235, -122.767], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        let routePolyline = L.polyline([], {color: '#3b82f6', weight: 6, opacity: 0.8}).addTo(map);
+        let marker = L.circleMarker([49.235, -122.767], { radius: 8, color: '#fff', fillColor: '#ef4444', fillOpacity: 1 }).addTo(map);
         
-        clearInterval(rideInterval);
-        logDiag("Ride paused.");
-      }
-    }
+        let routeData = []; // {lat, lon, ele, distFromStart}
+        let totalDistance = 0;
+        let currentRideDistance = 0;
+        let routeIndex = 0;
 
-    function rideLoopTick() {
-      elapsedSeconds++;
+        // Default 30km North Vancouver Route (Truncated Gillnetter representation)
+        const defaultGPX = `<?xml version="1.0" encoding="UTF-8"?><gpx><trk><trkseg>
+            <trkpt lat="49.3200" lon="-123.0724"><ele>10</ele></trkpt>
+            <trkpt lat="49.3300" lon="-123.0500"><ele>50</ele></trkpt>
+            <trkpt lat="49.3400" lon="-123.0200"><ele>120</ele></trkpt>
+            <trkpt lat="49.3500" lon="-122.9800"><ele>200</ele></trkpt>
+            <trkpt lat="49.3450" lon="-122.9500"><ele>150</ele></trkpt>
+            <trkpt lat="49.3200" lon="-122.9000"><ele>20</ele></trkpt>
+        </trkseg></trk></gpx>`;
 
-      const currPt = getCurrentGpxPoint(currentDistKm);
-      currentGradient = currPt.slope;
-      currentElevation = currPt.ele;
+        function parseGPX(xmlString) {
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlString, "text/xml");
+            const trkpts = xmlDoc.getElementsByTagName("trkpt");
+            
+            routeData = [];
+            totalDistance = 0;
+            let points = [];
+            
+            for (let i = 0; i < trkpts.length; i++) {
+                const lat = parseFloat(trkpts[i].getAttribute("lat"));
+                const lon = parseFloat(trkpts[i].getAttribute("lon"));
+                const eleNode = trkpts[i].getElementsByTagName("ele")[0];
+                const ele = eleNode ? parseFloat(eleNode.textContent) : 0;
+                
+                if (i > 0) {
+                    const prev = routeData[i-1];
+                    const dist = getDistanceFromLatLonInKm(prev.lat, prev.lon, lat, lon);
+                    totalDistance += dist;
+                }
+                
+                routeData.push({ lat, lon, ele, distFromStart: totalDistance });
+                points.push([lat, lon]);
+            }
 
-      if (ftmsServer && ftmsServer.connected) {
-        if (isErgMode) {
-          sendFtmsTargetPower(targetPower);
-        } else {
-          sendFtmsSimulationParameters(currentGradient);
+            routePolyline.setLatLngs(points);
+            map.fitBounds(routePolyline.getBounds(), { padding: [50, 50] });
+            
+            if (routeData.length > 0) {
+                marker.setLatLng([routeData[0].lat, routeData[0].lon]);
+                routeIndex = 0;
+                currentRideDistance = 0;
+            }
         }
-      }
 
-      if (!ftmsServer || !ftmsServer.connected) {
-        if (isErgMode) {
-          currentPower = targetPower;
-        } else {
-          const baseWatt = simEffortWatt * (virtualGear / 7.0);
-          currentPower = Math.round(baseWatt);
+        function loadGPX(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => parseGPX(e.target.result);
+            reader.readAsText(file);
+        }
+        
+        parseGPX(defaultGPX); // Init default
+
+        // --- Bluetooth Logic (FTMS & HR) ---
+        let trainerDevice, ftmsControlChar, hrDevice;
+        let currentPower = 0, currentSpeed = 0, currentHR = 0, targetPower = null;
+        let virtualGear = 1;
+        let rideStartTime = null;
+
+        const UUIDS = {
+            ftms: '00001826-0000-1000-8000-00805f9b34fb',
+            ftmsData: '00002ad2-0000-1000-8000-00805f9b34fb', // Indoor Bike Data
+            ftmsControl: '00002ad9-0000-1000-8000-00805f9b34fb', // Control Point
+            hr: '0000180d-0000-1000-8000-00805f9b34fb',
+            hrData: '00002a37-0000-1000-8000-00805f9b34fb'
+        };
+
+        async function connectTrainer() {
+            try {
+                if (!navigator.bluetooth) throw new Error("Web Bluetooth API missing. Check iframe permissions or use supported browser.");
+                
+                trainerDevice = await navigator.bluetooth.requestDevice({
+                    filters: [{ services: [UUIDS.ftms] }]
+                });
+                
+                const server = await trainerDevice.gatt.connect();
+                const service = await server.getPrimaryService(UUIDS.ftms);
+                
+                // Notifications for Speed & Power
+                const dataChar = await service.getCharacteristic(UUIDS.ftmsData);
+                await dataChar.startNotifications();
+                dataChar.addEventListener('characteristicvaluechanged', handleFTMSData);
+
+                // Control Point for Resistance/Erg Mode
+                try {
+                    ftmsControlChar = await service.getCharacteristic(UUIDS.ftmsControl);
+                    // Request control (Op Code 0x00)
+                    await ftmsControlChar.writeValue(new Uint8Array([0x00]));
+                    console.log("FTMS Control acquired. Ready for Garmin/Tacx simulation.");
+                } catch(e) {
+                    console.warn("FTMS Control not available. Falling back to read-only mode.", e);
+                }
+
+                if (!rideStartTime) rideStartTime = Date.now();
+                alert("Smart Trainer Connected!");
+            } catch (error) {
+                alert("Connection failed: " + error.message + "\n\n(Ensure Tacx Neo / Garmin Trax is in pairing mode and not connected to another app).");
+            }
         }
 
-        const totalMass = riderWeight + bikeWeight;
-        const g = 9.81;
-        const slopeRad = Math.atan(currentGradient / 100.0);
-        const gravityForce = totalMass * g * Math.sin(slopeRad);
-        const rollingForce = totalMass * g * Math.cos(slopeRad) * 0.004;
-
-        let v = 5.0;
-        for (let iter = 0; iter < 5; iter++) {
-          const aeroForce = 0.5 * 0.32 * 1.225 * v * v;
-          const totalForce = Math.max(5.0, gravityForce + rollingForce + aeroForce);
-          v = currentPower / totalForce;
-          if (v < 0.5) v = 0.5;
+        async function connectHR() {
+            try {
+                hrDevice = await navigator.bluetooth.requestDevice({
+                    filters: [{ services: [UUIDS.hr] }]
+                });
+                const server = await hrDevice.gatt.connect();
+                const service = await server.getPrimaryService(UUIDS.hr);
+                const char = await service.getCharacteristic(UUIDS.hrData);
+                
+                await char.startNotifications();
+                char.addEventListener('characteristicvaluechanged', (e) => {
+                    const view = e.target.value;
+                    const flags = view.getUint8(0);
+                    const format = flags & 0x01;
+                    currentHR = format === 1 ? view.getUint16(1, true) : view.getUint8(1);
+                    document.getElementById('stat-hr').innerHTML = `${currentHR} <span class="text-lg">bpm</span>`;
+                });
+            } catch (error) {
+                alert("HR Connection failed: " + error.message);
+            }
         }
 
-        currentSpeedKmH = v * 3.6;
-        currentCadence = Math.round(75 + (currentPower - 150) * 0.15);
-        if (currentCadence < 40) currentCadence = 60;
-      }
+        function handleFTMSData(event) {
+            // Parse Indoor Bike Data format (Bluetooth SIG spec)
+            const value = event.target.value;
+            const flags = value.getUint16(0, true);
+            let offset = 2;
+            
+            // Speed (km/h resolution 0.01)
+            currentSpeed = value.getUint16(offset, true) / 100.0;
+            offset += 2;
+            
+            // Skip Average Speed if present (bit 0)
+            if (flags & 0x01) offset += 2;
+            // Skip Cadence if present (bit 1)
+            if (flags & 0x02) offset += 2;
+            // Skip Average Cadence if present (bit 2)
+            if (flags & 0x04) offset += 2;
+            // Skip Distance if present (bit 3)
+            if (flags & 0x08) offset += 3;
+            // Skip Resistance Level if present (bit 4)
+            if (flags & 0x10) offset += 2;
+            
+            // Instantaneous Power (bit 5)
+            if (flags & 0x20) {
+                currentPower = value.getInt16(offset, true);
+                offset += 2;
+            }
 
-      const distIncrementKm = (currentSpeedKmH / 3600.0);
-      currentDistKm += distIncrementKm;
-
-      const maxDist = gpxPoints[gpxPoints.length - 1].dist;
-      if (currentDistKm >= maxDist) {
-        currentDistKm = maxDist;
-        finishRide();
-      }
-
-      powerSamples.push(currentPower);
-      speedSamples.push(currentSpeedKmH);
-      if (currentHr > 0) hrSamples.push(currentHr);
-      if (currentPower > maxPowerRecorded) maxPowerRecorded = currentPower;
-
-      const nextPt = getCurrentGpxPoint(currentDistKm);
-      if (riderMarker) {
-        riderMarker.setLatLng([nextPt.lat, nextPt.lng]);
-        map.panTo([nextPt.lat, nextPt.lng], { animate: true, duration: 0.5 });
-      }
-
-      updateHudValues();
-      renderElevationGraph();
-    }
-
-    function getCurrentGpxPoint(dist) {
-      if (gpxPoints.length === 0) return { lat: 0, lng: 0, ele: 0, slope: 0 };
-      if (dist <= 0) return { ...gpxPoints[0], slope: 0 };
-
-      for (let i = 0; i < gpxPoints.length - 1; i++) {
-        if (dist >= gpxPoints[i].dist && dist <= gpxPoints[i+1].dist) {
-          const p1 = gpxPoints[i];
-          const p2 = gpxPoints[i+1];
-          const segmentDist = (p2.dist - p1.dist) * 1000;
-          const dEle = p2.ele - p1.ele;
-          const slope = segmentDist > 1 ? (dEle / segmentDist) * 100 : 0;
-
-          const ratio = (dist - p1.dist) / (p2.dist - p1.dist);
-          const lat = p1.lat + (p2.lat - p1.lat) * ratio;
-          const lng = p1.lng + (p2.lng - p1.lng) * ratio;
-          const ele = p1.ele + dEle * ratio;
-
-          return { lat, lng, ele, slope };
+            updateUI();
+            progressRide();
         }
-      }
 
-      const last = gpxPoints[gpxPoints.length - 1];
-      return { ...last, slope: 0 };
-    }
-
-    function updateHudValues() {
-      document.getElementById('hudPower').innerText = currentPower;
-      document.getElementById('hudSpeed').innerText = currentSpeedKmH.toFixed(1);
-      document.getElementById('hudCadence').innerText = currentCadence;
-      document.getElementById('hudHr').innerText = currentHr > 0 ? currentHr : '--';
-      document.getElementById('hudGradient').innerText = (currentGradient >= 0 ? '+' : '') + currentGradient.toFixed(1) + '%';
-      document.getElementById('hudElevation').innerText = Math.round(currentElevation) + ' m';
-      document.getElementById('hudDistance').innerText = currentDistKm.toFixed(2);
-      
-      const maxDist = gpxPoints.length > 0 ? gpxPoints[gpxPoints.length - 1].dist : 22;
-      const remaining = Math.max(0, maxDist - currentDistKm);
-      document.getElementById('hudDistRemaining').innerText = remaining.toFixed(2) + ' km';
-
-      const mins = Math.floor(elapsedSeconds / 60);
-      const secs = elapsedSeconds % 60;
-      document.getElementById('hudTime').innerText = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-
-      const avgPwr = powerSamples.length > 0 ? Math.round(powerSamples.reduce((a,b)=>a+b, 0)/powerSamples.length) : 0;
-      const avgSpd = speedSamples.length > 0 ? (speedSamples.reduce((a,b)=>a+b, 0)/speedSamples.length).toFixed(1) : '0.0';
-      document.getElementById('hudAvgPower').innerText = avgPwr + 'W';
-      document.getElementById('hudAvgSpeed').innerText = avgSpd;
-
-      if (currentHr > 0) {
-        let zone = "Z1 Recovery";
-        if (currentHr > 165) zone = "Z5 Anaerobic";
-        else if (currentHr > 150) zone = "Z4 Threshold";
-        else if (currentHr > 135) zone = "Z3 Tempo";
-        else if (currentHr > 120) zone = "Z2 Endurance";
-        document.getElementById('hudHrZone').innerText = zone;
-      }
-    }
-
-    /* ==========================================================================
-       7. UI TARGET POWER, GEARS & SIMULATION
-       ========================================================================== */
-    function setTargetPower(watts) {
-      targetPower = watts;
-      document.getElementById('hudTargetPower').innerText = watts + 'W';
-      logDiag(`Target Power set: ${watts}W`);
-      if (isErgMode && ftmsServer && ftmsServer.connected) {
-        sendFtmsTargetPower(watts);
-      }
-    }
-
-    function toggleErgMode() {
-      isErgMode = !isErgMode;
-      const btn = document.getElementById('btnErgToggle');
-      const badge = document.getElementById('ergBadge');
-
-      if (isErgMode) {
-        btn.innerText = "ERG: ON";
-        btn.className = "px-3 py-1.5 bg-zwift-blue text-slate-950 rounded-lg text-xs font-black hover:opacity-90 transition ml-1";
-        badge.innerText = "ERG MODE";
-        badge.className = "bg-zwift-blue/20 text-zwift-blue px-1.5 py-0.5 rounded text-[9px] font-black";
-      } else {
-        btn.innerText = "SIM: ON";
-        btn.className = "px-3 py-1.5 bg-zwift-orange text-white rounded-lg text-xs font-black hover:opacity-90 transition ml-1";
-        badge.innerText = "SIM MODE";
-        badge.className = "bg-zwift-orange/20 text-zwift-orange px-1.5 py-0.5 rounded text-[9px] font-black";
-      }
-    }
-
-    function shiftGear(delta) {
-      virtualGear += delta;
-      if (virtualGear < 1) virtualGear = 1;
-      if (virtualGear > 12) virtualGear = 12;
-
-      document.getElementById('gearDisplay').innerText = `G${virtualGear}`;
-      document.getElementById('hudVirtualGear').innerText = `${virtualGear} / 12`;
-      playClickSound();
-    }
-
-    function updateSimEffort(val) {
-      simEffortWatt = parseInt(val);
-      document.getElementById('simEffortVal').innerText = val + " W";
-    }
-
-    function updatePhysicsParams() {
-      riderWeight = parseFloat(document.getElementById('riderWeightInput').value) || 75;
-      bikeWeight = parseFloat(document.getElementById('bikeWeightInput').value) || 9;
-    }
-
-    /* ==========================================================================
-       8. ELEVATION CANVAS PROFILE
-       ========================================================================== */
-    function renderElevationGraph() {
-      const canvas = document.getElementById('elevationCanvas');
-      if (!canvas) return;
-
-      const ctx = canvas.getContext('2d');
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width;
-      canvas.height = rect.height;
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      if (gpxPoints.length === 0) return;
-
-      const maxDist = gpxPoints[gpxPoints.length - 1].dist;
-      const maxEle = Math.max(...gpxPoints.map(p => p.ele)) + 10;
-      const minEle = Math.min(...gpxPoints.map(p => p.ele)) - 5;
-
-      ctx.beginPath();
-      ctx.moveTo(0, canvas.height);
-
-      for (let i = 0; i < gpxPoints.length; i++) {
-        const x = (gpxPoints[i].dist / maxDist) * canvas.width;
-        const y = canvas.height - ((gpxPoints[i].ele - minEle) / (maxEle - minEle)) * canvas.height;
-        ctx.lineTo(x, y);
-      }
-
-      ctx.lineTo(canvas.width, canvas.height);
-      ctx.closePath();
-
-      const fillGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-      fillGradient.addColorStop(0, 'rgba(255, 85, 0, 0.6)');
-      fillGradient.addColorStop(1, 'rgba(15, 23, 42, 0.8)');
-      ctx.fillStyle = fillGradient;
-      ctx.fill();
-
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#FF5500';
-      ctx.stroke();
-
-      const riderX = (currentDistKm / maxDist) * canvas.width;
-      const currPt = getCurrentGpxPoint(currentDistKm);
-      const riderY = canvas.height - ((currPt.ele - minEle) / (maxEle - minEle)) * canvas.height;
-
-      ctx.beginPath();
-      ctx.arc(riderX, riderY, 5, 0, Math.PI * 2);
-      ctx.fillStyle = '#00CCFF';
-      ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#FFFFFF';
-      ctx.stroke();
-    }
-
-    /* ==========================================================================
-       9. SUMMARY & LEADERBOARD
-       ========================================================================== */
-    function finishRide() {
-      if (isRiding) toggleRideState();
-
-      const avgPwr = powerSamples.length > 0 ? Math.round(powerSamples.reduce((a,b)=>a+b, 0)/powerSamples.length) : 0;
-      const avgSpd = speedSamples.length > 0 ? (speedSamples.reduce((a,b)=>a+b, 0)/speedSamples.length).toFixed(1) : '0.0';
-
-      document.getElementById('sumDist').innerText = currentDistKm.toFixed(2) + " km";
-      document.getElementById('sumTime').innerText = document.getElementById('hudTime').innerText;
-      document.getElementById('sumAvgPower').innerText = avgPwr + " W";
-      document.getElementById('sumMaxPower').innerText = maxPowerRecorded + " W";
-      document.getElementById('sumAvgSpeed').innerText = avgSpd + " km/h";
-      document.getElementById('sumElev').innerText = Math.round(totalElevGain) + " m";
-
-      document.getElementById('summaryModal').classList.remove('hidden');
-    }
-
-    function saveRideSummary() {
-      const name = document.getElementById('riderNameInput').value.trim() || "Velovet Member";
-      const avgPwr = powerSamples.length > 0 ? Math.round(powerSamples.reduce((a,b)=>a+b, 0)/powerSamples.length) : 0;
-      const avgSpd = speedSamples.length > 0 ? parseFloat((speedSamples.reduce((a,b)=>a+b, 0)/speedSamples.length).toFixed(1)) : 0;
-
-      const record = {
-        name: name,
-        date: new Date().toLocaleDateString(),
-        dist: currentDistKm.toFixed(2),
-        time: document.getElementById('hudTime').innerText,
-        avgPower: avgPwr,
-        avgSpeed: avgSpd,
-        elev: Math.round(totalElevGain)
-      };
-
-      const history = JSON.parse(localStorage.getItem('velovet_leaderboard') || '[]');
-      history.push(record);
-      localStorage.setItem('velovet_leaderboard', JSON.stringify(history));
-
-      document.getElementById('summaryModal').classList.add('hidden');
-      openLeaderboard();
-    }
-
-    function discardRideSummary() {
-      document.getElementById('summaryModal').classList.add('hidden');
-    }
-
-    function openLeaderboard() {
-      renderLeaderboardTable();
-      document.getElementById('leaderboardModal').classList.remove('hidden');
-    }
-
-    function closeLeaderboard() {
-      document.getElementById('leaderboardModal').classList.add('hidden');
-    }
-
-    function renderLeaderboardTable() {
-      const history = JSON.parse(localStorage.getItem('velovet_leaderboard') || '[]');
-      const tbody = document.getElementById('leaderboardTbody');
-      tbody.innerHTML = '';
-
-      if (history.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center p-4 text-slate-500">No rides logged yet. Complete a route to appear here!</td></tr>`;
-        return;
-      }
-
-      history.sort((a, b) => b.avgPower - a.avgPower);
-
-      history.forEach((row, idx) => {
-        const tr = document.createElement('tr');
-        tr.className = "hover:bg-slate-800/40 transition border-b border-slate-800/40";
-        tr.innerHTML = `
-          <td class="p-2.5 font-bold text-white flex items-center gap-1.5">
-            <span class="text-[10px] w-4 text-slate-500">${idx + 1}.</span> ${row.name}
-          </td>
-          <td class="p-2.5 text-slate-400">${row.date}</td>
-          <td class="p-2.5 text-slate-200">${row.dist}</td>
-          <td class="p-2.5 text-slate-200">${row.time}</td>
-          <td class="p-2.5 font-black text-zwift-orange">${row.avgPower} W</td>
-          <td class="p-2.5 text-zwift-blue font-bold">${row.avgSpeed} km/h</td>
-          <td class="p-2.5 text-emerald-400">${row.elev} m</td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
-
-    function clearLeaderboard() {
-      if (confirm("Clear club leaderboard history?")) {
-        localStorage.removeItem('velovet_leaderboard');
-        renderLeaderboardTable();
-      }
-    }
-
-    /* ==========================================================================
-       10. DIAGNOSTIC LOGS & HELPERS
-       ========================================================================== */
-    function checkBlePermissions() {
-      const isBleAvailable = 'bluetooth' in navigator;
-      document.getElementById('diagBleSupport').innerText = isBleAvailable ? "Supported" : "Blocked/Unavailable";
-      document.getElementById('diagBleSupport').className = isBleAvailable ? "text-emerald-400" : "text-red-400";
-
-      try {
-        if (window.self !== window.top) {
-          document.getElementById('diagIframePermission').innerText = "In iFrame (Check Permissions)";
-          document.getElementById('diagIframePermission').className = "text-amber-400";
+        async function setTrainerGrade(gradePercent) {
+            if (!ftmsControlChar) return;
+            try {
+                // Op code 0x11 = Set Indoor Bike Simulation Parameters
+                // Grade resolution is 0.01%, stored as signed 16-bit
+                const gradeVal = Math.round(gradePercent * 100);
+                const buffer = new ArrayBuffer(7);
+                const view = new DataView(buffer);
+                view.setUint8(0, 0x11); // Op code
+                view.setInt16(1, gradeVal, true); // Wind Speed (not setting, mock 0)
+                view.setInt16(3, gradeVal, true); // Grade
+                view.setUint8(5, 0); // Crr
+                view.setUint8(6, 0); // Cw
+                
+                await ftmsControlChar.writeValue(buffer);
+            } catch (e) { console.error("Grade update failed", e); }
         }
-      } catch (e) {
-        logDiag("iFrame check info: " + e.message);
-      }
-    }
 
-    function logDiag(message) {
-      const logs = document.getElementById('diagConsoleLogs');
-      const time = new Date().toLocaleTimeString();
-      const entry = document.createElement('div');
-      entry.innerHTML = `<span class="text-slate-500">[${time}]</span> ${message}`;
-      logs.appendChild(entry);
-      logs.scrollTop = logs.scrollHeight;
-    }
-
-    function clearDiagLogs() {
-      document.getElementById('diagConsoleLogs').innerHTML = '';
-    }
-
-    function toggleDiagPanel() {
-      document.getElementById('diagDrawer').classList.toggle('translate-x-full');
-    }
-
-    function retryFtmsControlPoint() {
-      requestFtmsControl();
-    }
-
-    function dismissAlertBanner() {
-      document.getElementById('bleAlertBanner').style.display = 'none';
-    }
-
-    function setupKeyboardControls() {
-      window.addEventListener('keydown', (e) => {
-        if (e.key === 'ArrowUp') shiftGear(1);
-        if (e.key === 'ArrowDown') shiftGear(-1);
-        if (e.code === 'Space') {
-          e.preventDefault();
-          toggleRideState();
+        async function updateTargetPower(watts) {
+            targetPower = parseInt(watts);
+            document.getElementById('power-slider').value = targetPower;
+            document.getElementById('target-power-display').innerText = `${targetPower}W ERG`;
+            
+            if (!ftmsControlChar) return;
+            try {
+                // Op code 0x05 = Set Target Power
+                const buffer = new ArrayBuffer(3);
+                const view = new DataView(buffer);
+                view.setUint8(0, 0x05); // Op Code
+                view.setInt16(1, targetPower, true); // Power resolution 1W
+                await ftmsControlChar.writeValue(buffer);
+            } catch (e) { console.error("Target power update failed", e); }
         }
-      });
-    }
 
-    let audioCtx = null;
-    function setupAudioCues() {
-      try {
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        audioCtx = new AudioContext();
-      } catch (e) {}
-    }
+        // --- Ride Simulation Physics ---
+        let lastPhysicsTime = Date.now();
+        function progressRide() {
+            const now = Date.now();
+            const deltaT = (now - lastPhysicsTime) / 3600000; // hours
+            lastPhysicsTime = now;
 
-    function playClickSound() {
-      if (!audioCtx) return;
-      try {
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(600, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.05);
-        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.05);
-      } catch (e) {}
-    }
-  </script>
+            if (currentSpeed > 0 && routeData.length > 1) {
+                // Adjust speed slightly by gear if in free ride (mock gearing effect)
+                const effectiveSpeed = targetPower ? currentSpeed : currentSpeed * (1 + (virtualGear - 5)*0.05);
+                
+                currentRideDistance += effectiveSpeed * deltaT;
+                
+                // Find nearest index
+                while (routeIndex < routeData.length - 1 && routeData[routeIndex+1].distFromStart < currentRideDistance) {
+                    routeIndex++;
+                }
+
+                if (routeIndex < routeData.length - 1) {
+                    const p1 = routeData[routeIndex];
+                    const p2 = routeData[routeIndex+1];
+                    
+                    // Interpolate marker position
+                    const segmentDist = p2.distFromStart - p1.distFromStart;
+                    const traveled = currentRideDistance - p1.distFromStart;
+                    const ratio = segmentDist > 0 ? traveled / segmentDist : 0;
+                    
+                    const curLat = p1.lat + (p2.lat - p1.lat) * ratio;
+                    const curLon = p1.lon + (p2.lon - p1.lon) * ratio;
+                    
+                    marker.setLatLng([curLat, curLon]);
+                    map.panTo([curLat, curLon], {animate: true});
+
+                    // Calculate and set Grade for FTMS Simulation Mode (if not in ERG)
+                    if (!targetPower) {
+                        const eleDiff = p2.ele - p1.ele;
+                        const distMeters = segmentDist * 1000;
+                        const grade = distMeters > 0 ? (eleDiff / distMeters) * 100 : 0;
+                        document.getElementById('stat-grade').innerHTML = `${grade.toFixed(1)} <span class="text-lg">%</span>`;
+                        setTrainerGrade(grade);
+                    }
+                }
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('stat-power').innerHTML = `${currentPower} <span class="text-lg">W</span>`;
+            document.getElementById('stat-speed').innerHTML = `${currentSpeed.toFixed(1)} <span class="text-lg">km/h</span>`;
+            document.getElementById('stat-dist').innerHTML = `${currentRideDistance.toFixed(2)} <span class="text-lg">km</span>`;
+        }
+
+        function shiftGear(dir) {
+            virtualGear = Math.max(1, Math.min(10, virtualGear + dir));
+            document.getElementById('gear-display').innerText = virtualGear;
+            targetPower = null; // Break out of ERG mode if shifting
+            document.getElementById('target-power-display').innerText = `Gear ${virtualGear}`;
+        }
+
+        // --- Leaderboard & Storage ---
+        function toggleLeaderboard() {
+            const modal = document.getElementById('leaderboard-modal');
+            modal.classList.toggle('hidden');
+            renderLeaderboard();
+        }
+
+        function saveRide() {
+            const name = document.getElementById('rider-name').value || 'Anonymous';
+            if (currentRideDistance < 0.1) return alert("Ride distance too short to save.");
+            
+            const timeDiff = rideStartTime ? (Date.now() - rideStartTime) / 60000 : 0; // minutes
+            
+            const ride = {
+                name,
+                distance: currentRideDistance.toFixed(2),
+                power: currentPower, // Rough mock for avg power
+                time: timeDiff.toFixed(1),
+                date: new Date().toLocaleDateString()
+            };
+
+            let board = JSON.parse(localStorage.getItem('velovet_leaderboard') || '[]');
+            board.push(ride);
+            board.sort((a,b) => b.distance - a.distance);
+            localStorage.setItem('velovet_leaderboard', JSON.stringify(board));
+            
+            toggleLeaderboard(); // refresh
+        }
+
+        function renderLeaderboard() {
+            const board = JSON.parse(localStorage.getItem('velovet_leaderboard') || '[]');
+            const tbody = document.getElementById('leaderboard-body');
+            tbody.innerHTML = '';
+            board.forEach(r => {
+                tbody.innerHTML += `<tr class="border-b border-gray-700">
+                    <td class="py-2 font-bold">${r.name}</td>
+                    <td class="py-2 text-blue-400">${r.distance} km</td>
+                    <td class="py-2 text-yellow-400">${r.power} W</td>
+                    <td class="py-2">${r.time} min</td>
+                    <td class="py-2 text-gray-500">${r.date}</td>
+                </tr>`;
+            });
+        }
+
+        // Utils
+        function deg2rad(deg) { return deg * (Math.PI/180); }
+        function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+            const R = 6371; 
+            const dLat = deg2rad(lat2-lat1);  
+            const dLon = deg2rad(lon2-lon1); 
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+                      Math.sin(dLon/2) * Math.sin(dLon/2); 
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+            return R * c;
+        }
+
+        // Mock test loop for debugging without trainer
+        // setInterval(() => { if(!trainerDevice) { currentSpeed=30; currentPower=200; progressRide(); updateUI(); } }, 1000);
+    </script>
 </body>
 </html>
