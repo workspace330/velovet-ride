@@ -1,313 +1,414 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full bg-slate-950 text-slate-100 dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Velovet Ride | Pro Indoor Cycling Studio</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Velovet Ride - Indoor Cycling HUD</title>
   
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- CSS CDNs -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   
-  <!-- FontAwesome Icons CDN -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- JS CDNs -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   
-  <!-- Leaflet CSS & JS for Interactive Map -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-
-  <!-- Google Font: Inter -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800;900&display=swap" rel="stylesheet">
-
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            zwift: {
-              orange: '#FF5500',
-              blue: '#00A8FF',
-              green: '#00E676',
-              purple: '#9C27B0',
-              dark: '#12131C',
-              card: '#1C1D2A',
-              border: '#2A2C3D'
-            }
-          },
-          fontFamily: {
-            sans: ['Inter', 'sans-serif'],
-          }
-        }
-      }
-    }
-  </script>
-
   <style>
-    /* Custom Scrollbars */
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: #12131C; }
-    ::-webkit-scrollbar-thumb { background: #2A2C3D; border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: #FF5500; }
+    :root {
+      --bg-dark: #0f172a;
+      --panel-bg: rgba(30, 41, 59, 0.85);
+      --panel-border: rgba(255, 255, 255, 0.12);
+      --accent-orange: #ff6b00;
+      --accent-cyan: #00f0ff;
+      --accent-green: #10b981;
+      --accent-red: #ef4444;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
 
-    /* Custom range slider styling */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top iOS/Bluefy Warning Banner */
+    #ios-banner {
+      background: linear-gradient(90deg, #b91c1c, #c2410c);
+      color: #fff;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 6px 12px;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      z-index: 1000;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+
+    /* Main App Layout */
+    #app-container {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      height: calc(100vh - 30px);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Interactive Leaflet Map */
+    #map {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      background: #090d16;
+    }
+
+    /* Overlay Zwift-Style HUD */
+    .hud-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      pointer-events: none;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      padding: 12px;
+      gap: 12px;
+    }
+
+    .hud-overlay * {
+      pointer-events: auto;
+    }
+
+    /* Top Stats Grid */
+    .top-stats-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+      gap: 8px;
+      width: 100%;
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    .stat-card {
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 8px 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    }
+
+    .stat-label {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 2px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .stat-value {
+      font-size: 1.4rem;
+      font-weight: 800;
+      font-feature-settings: "tnum";
+      font-variant-numeric: tabular-nums;
+      color: var(--text-main);
+    }
+
+    .stat-unit {
+      font-size: 0.7rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-left: 2px;
+    }
+
+    .stat-card.power { border-bottom: 3px solid var(--accent-orange); }
+    .stat-card.power .stat-value { color: var(--accent-orange); }
+    .stat-card.hr { border-bottom: 3px solid var(--accent-red); }
+    .stat-card.hr .stat-value { color: var(--accent-red); }
+    .stat-card.cadence { border-bottom: 3px solid var(--accent-cyan); }
+    .stat-card.cadence .stat-value { color: var(--accent-cyan); }
+
+    /* Middle HUD Floating Panel Controls */
+    .middle-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      width: 100%;
+    }
+
+    .left-controls, .right-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .hud-btn {
+      background: var(--panel-bg);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid var(--panel-border);
+      color: var(--text-main);
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
+    .hud-btn:hover {
+      background: rgba(51, 65, 85, 0.9);
+      border-color: rgba(255,255,255,0.3);
+    }
+
+    .hud-btn.primary {
+      background: linear-gradient(135deg, var(--accent-orange), #ea580c);
+      border: none;
+      color: #fff;
+    }
+
+    .hud-btn.primary:disabled {
+      background: #334155;
+      color: #94a3b8;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    /* ERG Mode Target Watt Slider Panel */
+    .watt-control-panel {
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--panel-border);
+      padding: 10px 14px;
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      width: 220px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }
+
+    .watt-slider-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .watt-slider-val {
+      font-weight: 700;
+      color: var(--accent-orange);
+    }
+
     input[type=range] {
       -webkit-appearance: none;
-      background: transparent;
-    }
-    input[type=range]:focus { outline: none; }
-    input[type=range]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      height: 24px;
-      width: 24px;
-      border-radius: 50%;
-      background: #FF5500;
-      cursor: pointer;
-      box-shadow: 0 0 10px rgba(255, 85, 0, 0.6);
-      margin-top: -8px;
-    }
-    input[type=range]::-webkit-slider-runnable-track {
       width: 100%;
-      height: 8px;
-      cursor: pointer;
-      background: #2A2C3D;
-      border-radius: 4px;
+      background: #334155;
+      height: 6px;
+      border-radius: 3px;
+      outline: none;
     }
 
-    /* Map dark tile overlay filter */
-    .dark-tiles .leaflet-tile {
-      filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      height: 18px;
+      width: 18px;
+      border-radius: 50%;
+      background: var(--accent-orange);
+      cursor: pointer;
+      box-shadow: 0 0 8px rgba(255,107,0,0.6);
+    }
+
+    /* Bottom HUD Elevation Profile Canvas & Log Drawer */
+    .bottom-hud {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 100%;
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    .elevation-container {
+      position: relative;
+      width: 100%;
+      height: 90px;
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+    }
+
+    #elevation-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Diagnostic Console Overlay Drawer */
+    #diagnostic-drawer {
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 8px 12px;
+      max-height: 120px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 0.7rem;
+      color: #38bdf8;
+      display: none;
+    }
+
+    .log-entry {
+      margin-bottom: 3px;
+      line-height: 1.2;
+    }
+
+    .log-entry.err { color: #f87171; }
+    .log-entry.warn { color: #fbbf24; }
+    .log-entry.success { color: #34d399; }
+
+    /* Custom Leaflet Rider Icon Animation */
+    .rider-leaflet-marker {
+      background: var(--accent-orange);
+      border: 2px solid #fff;
+      border-radius: 50%;
+      box-shadow: 0 0 12px var(--accent-orange);
+      transition: transform 0.3s ease;
     }
   </style>
 </head>
-<body class="h-full flex flex-col font-sans overflow-x-hidden antialiased select-none bg-zwift-dark text-slate-100">
+<body>
 
-  <!-- Persistent Top iOS/Browser Compatibility Banner -->
-  <div class="bg-amber-600/90 text-slate-950 text-xs sm:text-sm px-4 py-2 font-bold flex items-center justify-between shadow-md border-b border-amber-500/40 shrink-0">
-    <div class="flex items-center space-x-2">
-      <i class="fa-solid fa-triangle-exclamation text-base animate-bounce"></i>
-      <span><strong>iOS Notice:</strong> On iOS devices, the Bluefy Web BLE Browser or WebBLE app is required for Bluetooth connectivity due to Safari Web Bluetooth restrictions.</span>
-    </div>
-    <button onclick="this.parentElement.remove()" class="text-slate-950 hover:text-white px-2 py-0.5 rounded text-xs font-black">✕</button>
+  <!-- Top iOS Bluefy Warning Banner -->
+  <div id="ios-banner">
+    <i class="fa-solid fa-circle-info"></i>
+    <span>Notice: On iOS devices, the <strong>Bluefy Web BLE Browser</strong> or <strong>WebBLE app</strong> is required for Bluetooth connectivity due to Safari Web Bluetooth restrictions.</span>
   </div>
 
-  <!-- Header Navigation & Controls -->
-  <header class="bg-zwift-card/80 backdrop-blur-md border-b border-zwift-border px-4 py-3 flex flex-wrap items-center justify-between gap-3 shrink-0">
-    <div class="flex items-center space-x-3">
-      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-zwift-orange to-amber-400 flex items-center justify-center shadow-lg shadow-zwift-orange/30">
-        <i class="fa-solid fa-person-biking text-xl text-slate-950"></i>
-      </div>
-      <div>
-        <h1 class="text-xl font-black tracking-wider uppercase italic text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-200 to-zwift-orange">Velovet Ride</h1>
-        <p class="text-[10px] text-slate-400 tracking-widest uppercase font-semibold">Pro Indoor Cycling Telemetry</p>
-      </div>
-    </div>
-
-    <!-- Central Telemetry Summary Pill -->
-    <div class="hidden md:flex items-center space-x-6 bg-slate-900/80 px-4 py-1.5 rounded-full border border-zwift-border text-xs font-mono">
-      <div class="flex items-center space-x-2">
-        <i class="fa-solid fa-stopwatch text-zwift-blue"></i>
-        <span id="header-timer">00:00:00</span>
-      </div>
-      <div class="w-px h-4 bg-slate-700"></div>
-      <div class="flex items-center space-x-2">
-        <i class="fa-solid fa-route text-zwift-green"></i>
-        <span id="header-distance">0.00 km</span>
-      </div>
-      <div class="w-px h-4 bg-slate-700"></div>
-      <div class="flex items-center space-x-2">
-        <i class="fa-solid fa-mountain text-amber-400"></i>
-        <span id="header-gradient">0.0%</span>
-      </div>
-    </div>
-
-    <!-- Action Controls & Bluetooth Status Buttons -->
-    <div class="flex items-center space-x-2">
-      <!-- HR Sensor Button -->
-      <button id="btn-connect-hr" onclick="toggleHRConnection()" class="px-3 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 text-rose-400 border border-rose-500/30">
-        <i class="fa-solid fa-heart-pulse text-rose-500" id="hr-icon"></i>
-        <span id="hr-status-text" class="hidden sm:inline">Connect HR</span>
-      </button>
-
-      <!-- Smart Trainer Button -->
-      <button id="btn-connect-trainer" onclick="toggleTrainerConnection()" class="px-3 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 text-zwift-blue border border-zwift-blue/30">
-        <i class="fa-solid fa-bluetooth text-zwift-blue" id="trainer-icon"></i>
-        <span id="trainer-status-text" class="hidden sm:inline">Connect Trainer</span>
-      </button>
-
-      <!-- Demo / Simulation Mode Toggle -->
-      <button id="btn-toggle-demo" onclick="toggleDemoMode()" class="px-3 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 bg-purple-950/60 text-purple-300 border border-purple-500/40 hover:bg-purple-900/60">
-        <i class="fa-solid fa-flask text-purple-400"></i>
-        <span id="demo-mode-text" class="hidden sm:inline">Enable Demo Mode</span>
-      </button>
-
-      <!-- Dynamic Primary Action CTA -->
-      <button id="btn-start-ride" disabled onclick="toggleRideState()" class="px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700">
-        Waiting for Bluetooth devices...
-      </button>
-    </div>
-  </header>
-
-  <!-- Main HUD Application Viewport -->
-  <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 p-3 overflow-hidden">
+  <!-- Main Container -->
+  <div id="app-container">
     
-    <!-- LEFT PANEL: Primary Real-Time Telemetry Gauges (3 cols) -->
-    <section class="lg:col-span-3 flex flex-col space-y-3">
+    <!-- Leaflet Map Canvas -->
+    <div id="map"></div>
+
+    <!-- Zwift HUD Overlay Controls -->
+    <div class="hud-overlay">
       
-      <!-- Power Gauge Box -->
-      <div class="bg-zwift-card rounded-2xl p-4 border border-zwift-border relative overflow-hidden flex flex-col justify-between shadow-xl">
-        <div class="flex justify-between items-center text-xs font-bold text-slate-400 uppercase tracking-wider">
-          <span><i class="fa-solid fa-bolt text-amber-400 mr-1.5"></i> Power</span>
-          <span id="power-target-label" class="text-[10px] text-zwift-orange bg-zwift-orange/10 px-2 py-0.5 rounded border border-zwift-orange/30">Target: ROUTE</span>
+      <!-- Top Dynamic Telemetry Bar -->
+      <div class="top-stats-bar">
+        <div class="stat-card power">
+          <div class="stat-label"><i class="fa-solid fa-bolt"></i> Power</div>
+          <div><span id="val-power" class="stat-value">0</span><span class="stat-unit">W</span></div>
         </div>
-        <div class="my-2 flex items-baseline justify-between">
-          <div class="text-6xl font-black tracking-tight text-amber-400 font-mono" id="hud-power">0</div>
-          <span class="text-xl font-bold text-slate-400">WATTS</span>
+        <div class="stat-card hr">
+          <div class="stat-label"><i class="fa-solid fa-heart-pulse"></i> Heart Rate</div>
+          <div><span id="val-hr" class="stat-value">--</span><span class="stat-unit">BPM</span></div>
         </div>
-        <!-- 3-Second Avg & Max Power -->
-        <div class="flex justify-between text-xs text-slate-400 font-mono pt-2 border-t border-slate-800">
-          <span>3s Avg: <strong id="hud-power-3s" class="text-slate-200">0 W</strong></span>
-          <span>Max: <strong id="hud-power-max" class="text-slate-200">0 W</strong></span>
+        <div class="stat-card cadence">
+          <div class="stat-label"><i class="fa-solid fa-rotate-right"></i> Cadence</div>
+          <div><span id="val-cadence" class="stat-value">0</span><span class="stat-unit">RPM</span></div>
         </div>
-      </div>
-
-      <!-- Cadence & Speed Dual Metric Panel -->
-      <div class="grid grid-cols-2 gap-3">
-        <!-- Cadence Card -->
-        <div class="bg-zwift-card rounded-2xl p-4 border border-zwift-border flex flex-col justify-between shadow-xl">
-          <div class="text-xs font-bold text-slate-400 uppercase tracking-wider">
-            <i class="fa-solid fa-rotate-right text-zwift-blue mr-1"></i> Cadence
-          </div>
-          <div class="my-2 flex items-baseline justify-between">
-            <div class="text-4xl font-black font-mono text-zwift-blue" id="hud-cadence">0</div>
-            <span class="text-xs font-bold text-slate-400">RPM</span>
-          </div>
-          <div class="text-[11px] text-slate-400 font-mono">Avg: <span id="hud-cadence-avg" class="text-slate-200">0</span></div>
+        <div class="stat-card">
+          <div class="stat-label"><i class="fa-solid fa-gauge-high"></i> Speed</div>
+          <div><span id="val-speed" class="stat-value">0.0</span><span class="stat-unit">km/h</span></div>
         </div>
-
-        <!-- Speed Card -->
-        <div class="bg-zwift-card rounded-2xl p-4 border border-zwift-border flex flex-col justify-between shadow-xl">
-          <div class="text-xs font-bold text-slate-400 uppercase tracking-wider">
-            <i class="fa-solid fa-gauge-high text-zwift-green mr-1"></i> Speed
-          </div>
-          <div class="my-2 flex items-baseline justify-between">
-            <div class="text-4xl font-black font-mono text-zwift-green" id="hud-speed">0.0</div>
-            <span class="text-xs font-bold text-slate-400">KM/H</span>
-          </div>
-          <div class="text-[11px] text-slate-400 font-mono">Avg: <span id="hud-speed-avg" class="text-slate-200">0.0</span></div>
+        <div class="stat-card">
+          <div class="stat-label"><i class="fa-solid fa-mountain"></i> Gradient</div>
+          <div><span id="val-gradient" class="stat-value">0.0</span><span class="stat-unit">%</span></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label"><i class="fa-solid fa-route"></i> Distance</div>
+          <div><span id="val-distance" class="stat-value">0.00</span><span class="stat-unit">km</span></div>
         </div>
       </div>
 
-      <!-- Heart Rate Monitoring Widget -->
-      <div class="bg-zwift-card rounded-2xl p-4 border border-zwift-border flex flex-col justify-between shadow-xl relative">
-        <div class="flex justify-between items-center text-xs font-bold text-slate-400 uppercase tracking-wider">
-          <span><i class="fa-solid fa-heart text-rose-500 mr-1.5 animate-pulse"></i> Heart Rate</span>
-          <span id="hr-zone-tag" class="text-[10px] px-2 py-0.5 rounded font-bold bg-slate-800 text-slate-300">Z1 - Warmup</span>
+      <!-- Middle Controls (BLE CTAs, Manual Watts, Simulation) -->
+      <div class="middle-controls">
+        
+        <div class="left-controls">
+          <button id="btn-connect-trainer" class="hud-btn primary">
+            <i class="fa-solid fa-bluetooth"></i>
+            <span id="lbl-connect-trainer">Waiting for Bluetooth devices...</span>
+          </button>
+
+          <button id="btn-connect-hr" class="hud-btn">
+            <i class="fa-solid fa-heart"></i> Connect Heart Rate
+          </button>
+
+          <button id="btn-demo-mode" class="hud-btn" style="border-color: var(--accent-cyan);">
+            <i class="fa-solid fa-play"></i> Toggle Demo / Simulation
+          </button>
         </div>
-        <div class="my-2 flex items-baseline justify-between">
-          <div class="text-5xl font-black tracking-tight text-rose-500 font-mono" id="hud-hr">--</div>
-          <span class="text-xl font-bold text-slate-400">BPM</span>
-        </div>
-        <!-- Heart Rate Progress Bar -->
-        <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-          <div id="hr-bar" class="bg-rose-500 h-full w-0 transition-all duration-500"></div>
+
+        <div class="right-controls">
+          <!-- Manual Watt Slider for ERG Target -->
+          <div class="watt-control-panel">
+            <div class="watt-slider-header">
+              <span><i class="fa-solid fa-sliders"></i> Target ERG Watts</span>
+              <span id="watt-target-disp" class="watt-slider-val">150 W</span>
+            </div>
+            <input type="range" id="watt-slider" min="50" max="400" value="150" step="5">
+          </div>
+
+          <button id="btn-toggle-logs" class="hud-btn">
+            <i class="fa-solid fa-terminal"></i> BLE Diagnostics Log
+          </button>
         </div>
       </div>
 
-      <!-- Mode Selection & Manual Watt Target Controls -->
-      <div class="bg-zwift-card rounded-2xl p-4 border border-zwift-border space-y-4 shadow-xl flex-1 flex flex-col justify-between">
-        <div>
-          <div class="flex justify-between items-center mb-3">
-            <h3 class="text-xs font-black uppercase text-slate-300 tracking-wider">Trainer Mode Control</h3>
-            <span class="text-[10px] text-slate-500 font-mono" id="current-mode-display">SIM MODE</span>
-          </div>
-          
-          <div class="grid grid-cols-2 gap-2 bg-slate-900/80 p-1 rounded-xl border border-zwift-border">
-            <button id="btn-mode-sim" onclick="setControlMode('SIM')" class="py-2 rounded-lg text-xs font-extrabold uppercase transition bg-zwift-orange text-white shadow">
-              <i class="fa-solid fa-mountain mr-1"></i> SIM (Route)
-            </button>
-            <button id="btn-mode-erg" onclick="setControlMode('ERG')" class="py-2 rounded-lg text-xs font-extrabold uppercase transition text-slate-400 hover:text-white">
-              <i class="fa-solid fa-sliders mr-1"></i> ERG Mode
-            </button>
-          </div>
+      <!-- Bottom Elevation Canvas HUD & Log Drawer -->
+      <div class="bottom-hud">
+        <div class="elevation-container">
+          <canvas id="elevation-canvas"></canvas>
         </div>
-
-        <!-- Dynamic ERG Target Slider -->
-        <div id="erg-controls" class="space-y-2 opacity-50 pointer-events-none transition-all">
-          <div class="flex justify-between items-center text-xs">
-            <span class="font-bold text-slate-300">Target Wattage:</span>
-            <span class="font-mono text-base font-black text-zwift-orange" id="erg-watt-val">150 W</span>
-          </div>
-          <input type="range" id="erg-slider" min="50" max="450" step="5" value="150" oninput="updateERGTarget(this.value)" class="w-full">
-          <div class="flex justify-between text-[10px] text-slate-500 font-mono">
-            <span>50W</span>
-            <span>250W</span>
-            <span>450W</span>
-          </div>
-        </div>
-
-        <!-- Custom GPX Route Upload CTA -->
-        <div class="pt-2 border-t border-slate-800 space-y-2">
-          <label class="block w-full text-center bg-slate-800 hover:bg-slate-700 text-slate-300 py-2 rounded-xl text-xs font-bold cursor-pointer transition border border-slate-700">
-            <i class="fa-solid fa-file-code mr-1.5 text-zwift-blue"></i> Load Custom GPX Route
-            <input type="file" id="gpx-file-input" accept=".gpx" onchange="handleGPXUpload(event)" class="hidden">
-          </label>
+        <div id="diagnostic-drawer">
+          <div class="log-entry success">[System] Velovet Ride Initialized. Modern FTMS Ready.</div>
         </div>
       </div>
 
-    </section>
+    </div>
+  </div>
 
-    <!-- RIGHT PANEL: Live Interactive Map, Elevation Canvas Profile & Diagnostics (9 cols) -->
-    <section class="lg:col-span-9 flex flex-col space-y-3 h-full">
-      
-      <!-- Top Half: Map Box -->
-      <div class="bg-zwift-card rounded-2xl border border-zwift-border overflow-hidden flex-1 relative flex flex-col min-h-[350px]">
-        <!-- HUD Header Bar on Map -->
-        <div class="absolute top-3 left-3 right-3 z-[1000] flex justify-between items-center pointer-events-none">
-          <div class="bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-zwift-border text-xs font-bold pointer-events-auto flex items-center space-x-2 shadow-lg">
-            <i class="fa-solid fa-map-location-dot text-zwift-orange"></i>
-            <span id="route-title">Gillnetter Route</span>
-          </div>
-          
-          <div class="bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-zwift-border text-xs font-mono font-bold pointer-events-auto shadow-lg flex items-center space-x-3">
-            <span>Elev Gain: <strong id="hud-elev-gain" class="text-zwift-green">0 m</strong></span>
-            <span class="text-slate-600">|</span>
-            <span>Gradient: <strong id="hud-gradient-live" class="text-amber-400">0.0%</strong></span>
-          </div>
-        </div>
-
-        <!-- Leaflet Map Container -->
-        <div id="map" class="w-full h-full min-h-[350px] z-10 dark-tiles"></div>
-      </div>
-
-      <!-- Bottom Half: Canvas Elevation Profile Chart -->
-      <div class="bg-zwift-card rounded-2xl border border-zwift-border p-3 h-44 flex flex-col justify-between shadow-xl relative shrink-0">
-        <div class="flex justify-between items-center text-xs font-bold text-slate-400 mb-1">
-          <span><i class="fa-solid fa-chart-area text-zwift-blue mr-1.5"></i> Elevation Profile & Position</span>
-          <span class="text-[11px] font-mono font-bold text-slate-200" id="profile-progress">0.00 / 0.00 km</span>
-        </div>
-        <div class="flex-1 w-full relative">
-          <canvas id="elevation-canvas" class="w-full h-full block rounded-lg"></canvas>
-        </div>
-      </div>
-
-      <!-- Diagnostics & Log Console Tray -->
-      <div class="bg-zwift-card rounded-2xl border border-zwift-border p-3 h-32 flex flex-col shadow-xl shrink-0">
-        <div class="flex justify-between items-center text-xs font-bold text-slate-400 mb-2">
-          <span><i class="fa-solid fa-terminal text-emerald-400 mr-1.5"></i> Diagnostics & BLE Event Log</span>
-          <button onclick="clearDiagnosticLogs()" class="text-[10px] text-slate-500 hover:text-slate-300">Clear Logs</button>
-        </div>
-        <div id="diagnostic-log" class="flex-1 font-mono text-[11px] bg-slate-950/80 p-2 rounded-lg border border-slate-800/80 overflow-y-auto text-emerald-400/90 space-y-1">
-          <div>[System Initialization] Velovet Ride Engine Ready. Awaiting sensors...</div>
-        </div>
-      </div>
-
-    </section>
-
-  </main>
-
-  <!-- Embed Non-Executable Raw GPX Data Tag -->
+  <!-- Safe Non-Executable Script Embedding of the GPX Data -->
   <script type="application/gpx+xml" id="preset-gpx-data">
 <?xml version="1.0" encoding="UTF-8"?>
 <gpx creator="StravaGPX" version="1.1" xmlns="http://www.topografix.com/GPX/1/1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
@@ -324,716 +425,1462 @@
   <link href="https://www.strava.com/routes/3482785359896301410"/>
  </metadata>
  <trk>
-  <name>Gillnetter Route</name>
+  <name>Gillnetter</name>
+  <link href="https://www.strava.com/routes/3482785359896301410"/>
   <type>cycling</type>
   <trkseg>
-   <trkpt lat="49.23517" lon="-122.76760"><ele>7.64</ele></trkpt>
-   <trkpt lat="49.23543" lon="-122.76702"><ele>7.58</ele></trkpt>
-   <trkpt lat="49.23569" lon="-122.76644"><ele>7.72</ele></trkpt>
-   <trkpt lat="49.23580" lon="-122.76595"><ele>7.69</ele></trkpt>
-   <trkpt lat="49.23589" lon="-122.76497"><ele>7.45</ele></trkpt>
-   <trkpt lat="49.23606" lon="-122.76415"><ele>7.49</ele></trkpt>
-   <trkpt lat="49.23624" lon="-122.76333"><ele>7.36</ele></trkpt>
-   <trkpt lat="49.23640" lon="-122.76286"><ele>7.40</ele></trkpt>
-   <trkpt lat="49.23677" lon="-122.76215"><ele>7.43</ele></trkpt>
-   <trkpt lat="49.23717" lon="-122.76146"><ele>7.36</ele></trkpt>
-   <trkpt lat="49.23757" lon="-122.76077"><ele>7.40</ele></trkpt>
-   <trkpt lat="49.23805" lon="-122.75996"><ele>7.22</ele></trkpt>
-   <trkpt lat="49.23853" lon="-122.75914"><ele>7.28</ele></trkpt>
-   <trkpt lat="49.23901" lon="-122.75832"><ele>7.23</ele></trkpt>
-   <trkpt lat="49.23933" lon="-122.75777"><ele>7.24</ele></trkpt>
-   <trkpt lat="49.23966" lon="-122.75722"><ele>7.19</ele></trkpt>
-   <trkpt lat="49.24018" lon="-122.75612"><ele>7.09</ele></trkpt>
-   <trkpt lat="49.24071" lon="-122.75502"><ele>7.08</ele></trkpt>
-   <trkpt lat="49.24124" lon="-122.75392"><ele>7.32</ele></trkpt>
-   <trkpt lat="49.24185" lon="-122.75256"><ele>7.21</ele></trkpt>
-   <trkpt lat="49.24222" lon="-122.75167"><ele>7.24</ele></trkpt>
-   <trkpt lat="49.24259" lon="-122.75078"><ele>7.14</ele></trkpt>
-   <trkpt lat="49.24291" lon="-122.74995"><ele>7.06</ele></trkpt>
-   <trkpt lat="49.24327" lon="-122.74903"><ele>7.10</ele></trkpt>
-   <trkpt lat="49.24363" lon="-122.74811"><ele>7.09</ele></trkpt>
-   <trkpt lat="49.24399" lon="-122.74719"><ele>7.18</ele></trkpt>
-   <trkpt lat="49.24435" lon="-122.74631"><ele>7.08</ele></trkpt>
-   <trkpt lat="49.24472" lon="-122.74544"><ele>7.13</ele></trkpt>
-   <trkpt lat="49.24509" lon="-122.74457"><ele>7.20</ele></trkpt>
-   <trkpt lat="49.24556" lon="-122.74307"><ele>7.07</ele></trkpt>
-   <trkpt lat="49.24590" lon="-122.74196"><ele>6.94</ele></trkpt>
-   <trkpt lat="49.24604" lon="-122.74151"><ele>6.83</ele></trkpt>
-   <trkpt lat="49.24620" lon="-122.74021"><ele>6.84</ele></trkpt>
-   <trkpt lat="49.24632" lon="-122.73910"><ele>6.76</ele></trkpt>
-   <trkpt lat="49.24666" lon="-122.73837"><ele>12.15</ele></trkpt>
-   <trkpt lat="49.24692" lon="-122.73877"><ele>18.24</ele></trkpt>
-   <trkpt lat="49.24729" lon="-122.73982"><ele>25.18</ele></trkpt>
-   <trkpt lat="49.24788" lon="-122.73991"><ele>31.94</ele></trkpt>
-   <trkpt lat="49.24832" lon="-122.73928"><ele>28.80</ele></trkpt>
-   <trkpt lat="49.24882" lon="-122.73874"><ele>23.76</ele></trkpt>
-   <trkpt lat="49.24937" lon="-122.73774"><ele>14.38</ele></trkpt>
-   <trkpt lat="49.24939" lon="-122.73610"><ele>8.19</ele></trkpt>
-   <trkpt lat="49.24821" lon="-122.73549"><ele>6.85</ele></trkpt>
-   <trkpt lat="49.24860" lon="-122.73286"><ele>7.20</ele></trkpt>
-   <trkpt lat="49.24980" lon="-122.73119"><ele>6.99</ele></trkpt>
-   <trkpt lat="49.25042" lon="-122.73055"><ele>7.09</ele></trkpt>
-   <trkpt lat="49.25117" lon="-122.73222"><ele>6.47</ele></trkpt>
-   <trkpt lat="49.25219" lon="-122.73102"><ele>6.41</ele></trkpt>
-   <trkpt lat="49.25296" lon="-122.73000"><ele>6.18</ele></trkpt>
-   <trkpt lat="49.25364" lon="-122.72654"><ele>6.44</ele></trkpt>
-   <trkpt lat="49.25505" lon="-122.72496"><ele>6.38</ele></trkpt>
-   <trkpt lat="49.25678" lon="-122.72364"><ele>6.39</ele></trkpt>
-   <trkpt lat="49.25822" lon="-122.72294"><ele>6.39</ele></trkpt>
-   <trkpt lat="49.26012" lon="-122.72188"><ele>6.52</ele></trkpt>
-   <trkpt lat="49.26202" lon="-122.72081"><ele>6.58</ele></trkpt>
-   <trkpt lat="49.26433" lon="-122.71939"><ele>6.47</ele></trkpt>
-   <trkpt lat="49.26676" lon="-122.71782"><ele>6.45</ele></trkpt>
-   <trkpt lat="49.26908" lon="-122.71568"><ele>6.59</ele></trkpt>
-   <trkpt lat="49.27096" lon="-122.71451"><ele>6.44</ele></trkpt>
-   <trkpt lat="49.27315" lon="-122.71343"><ele>6.39</ele></trkpt>
-   <trkpt lat="49.27567" lon="-122.71205"><ele>6.47</ele></trkpt>
-   <trkpt lat="49.27785" lon="-122.71086"><ele>6.47</ele></trkpt>
-   <trkpt lat="49.27955" lon="-122.71298"><ele>6.64</ele></trkpt>
-   <trkpt lat="49.28132" lon="-122.72296"><ele>6.73</ele></trkpt>
-   <trkpt lat="49.28255" lon="-122.72955"><ele>6.78</ele></trkpt>
-   <trkpt lat="49.28518" lon="-122.73303"><ele>6.92</ele></trkpt>
-   <trkpt lat="49.28583" lon="-122.73346"><ele>6.30</ele></trkpt>
+   <trkpt lat="49.235170000000004" lon="-122.76760000000002">
+    <ele>7.640000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.23543000134125" lon="-122.76702000329963">
+    <ele>7.580000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.235690000000005" lon="-122.76644000000002">
+    <ele>7.72</ele>
+   </trkpt>
+   <trkpt lat="49.235800000000005" lon="-122.76595">
+    <ele>7.69</ele>
+   </trkpt>
+   <trkpt lat="49.235890000000005" lon="-122.76497">
+    <ele>7.450000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.23606500288073" lon="-122.76415000300446">
+    <ele>7.490000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.23624" lon="-122.76333000000001">
+    <ele>7.36</ele>
+   </trkpt>
+   <trkpt lat="49.23624" lon="-122.76334000000001">
+    <ele>7.36</ele>
+   </trkpt>
+   <trkpt lat="49.23628" lon="-122.76318">
+    <ele>7.36</ele>
+   </trkpt>
+   <trkpt lat="49.2364" lon="-122.76286">
+    <ele>7.4</ele>
+   </trkpt>
+   <trkpt lat="49.23677000000001" lon="-122.76215">
+    <ele>7.430000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.2371700021042" lon="-122.76146000550264">
+    <ele>7.36</ele>
+   </trkpt>
+   <trkpt lat="49.237570000000005" lon="-122.76077000000001">
+    <ele>7.4</ele>
+   </trkpt>
+   <trkpt lat="49.237570000000005" lon="-122.76078000000001">
+    <ele>7.4</ele>
+   </trkpt>
+   <trkpt lat="49.23805000582853" lon="-122.75996001589606">
+    <ele>7.220000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.23853000585348" lon="-122.75914001585369">
+    <ele>7.280000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.23901000000001" lon="-122.75832000000001">
+    <ele>7.23</ele>
+   </trkpt>
+   <trkpt lat="49.239000000000004" lon="-122.75832000000001">
+    <ele>7.23</ele>
+   </trkpt>
+   <trkpt lat="49.23933000114496" lon="-122.75777000394254">
+    <ele>7.24</ele>
+   </trkpt>
+   <trkpt lat="49.23966" lon="-122.75722">
+    <ele>7.19</ele>
+   </trkpt>
+   <trkpt lat="49.24018667709091" lon="-122.7561200235021">
+    <ele>7.090000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.24071334373824" lon="-122.75502002354293">
+    <ele>7.08</ele>
+   </trkpt>
+   <trkpt lat="49.241240000000005" lon="-122.75392000000001">
+    <ele>7.320000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.24112" lon="-122.75419000000001">
+    <ele>7.180000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.241110000000006" lon="-122.75419000000001">
+    <ele>7.180000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.24132" lon="-122.75378">
+    <ele>7.300000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.24136000000001" lon="-122.75374000000001">
+    <ele>7.300000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.241490000000006" lon="-122.75345000000002">
+    <ele>7.33</ele>
+   </trkpt>
+   <trkpt lat="49.24185667347398" lon="-122.75256001328773">
+    <ele>7.21</ele>
+   </trkpt>
+   <trkpt lat="49.24222334011131" lon="-122.75167001335913">
+    <ele>7.24</ele>
+   </trkpt>
+   <trkpt lat="49.24259000000001" lon="-122.75078">
+    <ele>7.140000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.24291" lon="-122.74995000000001">
+    <ele>7.0600000000000005</ele>
+   </trkpt>
+   <trkpt lat="49.24291" lon="-122.74996000000002">
+    <ele>7.0600000000000005</ele>
+   </trkpt>
+   <trkpt lat="49.24327000734588" lon="-122.74903668016148">
+    <ele>7.1000000000000005</ele>
+   </trkpt>
+   <trkpt lat="49.24363000733345" lon="-122.7481133468602">
+    <ele>7.090000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.243990000000004" lon="-122.74719">
+    <ele>7.180000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.24435667323832" lon="-122.74631667966364">
+    <ele>7.08</ele>
+   </trkpt>
+   <trkpt lat="49.244723339893746" lon="-122.74544334635726">
+    <ele>7.130000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.245090000000005" lon="-122.74457000000001">
+    <ele>7.2</ele>
+   </trkpt>
+   <trkpt lat="49.24523000000001" lon="-122.74419">
+    <ele>7.2</ele>
+   </trkpt>
+   <trkpt lat="49.24556500537346" lon="-122.7430750075371">
+    <ele>7.07</ele>
+   </trkpt>
+   <trkpt lat="49.245900000000006" lon="-122.74196">
+    <ele>6.94</ele>
+   </trkpt>
+   <trkpt lat="49.245900000000006" lon="-122.74197000000001">
+    <ele>6.94</ele>
+   </trkpt>
+   <trkpt lat="49.24604" lon="-122.74151">
+    <ele>6.83</ele>
+   </trkpt>
+   <trkpt lat="49.246080000000006" lon="-122.74132000000002">
+    <ele>6.83</ele>
+   </trkpt>
+   <trkpt lat="49.24620000529801" lon="-122.74021000287442">
+    <ele>6.840000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.246320000000004" lon="-122.73910000000001">
+    <ele>6.760000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.24638" lon="-122.73878">
+    <ele>6.82</ele>
+   </trkpt>
+   <trkpt lat="49.246460000000006" lon="-122.73850000000002">
+    <ele>6.8100000000000005</ele>
+   </trkpt>
+   <trkpt lat="49.246520000000004" lon="-122.73842">
+    <ele>6.53</ele>
+   </trkpt>
+   <trkpt lat="49.246660000000006" lon="-122.73837">
+    <ele>5.15</ele>
+   </trkpt>
+   <trkpt lat="49.24672" lon="-122.73842">
+    <ele>4.81</ele>
+   </trkpt>
+   <trkpt lat="49.24676" lon="-122.73849000000001">
+    <ele>4.53</ele>
+   </trkpt>
+   <trkpt lat="49.24692" lon="-122.73877000000002">
+    <ele>4.24</ele>
+   </trkpt>
+   <trkpt lat="49.24696" lon="-122.739">
+    <ele>4.010000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.247040000000005" lon="-122.73913">
+    <ele>4.050000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.24709000000001" lon="-122.73927">
+    <ele>4.33</ele>
+   </trkpt>
+   <trkpt lat="49.247150000000005" lon="-122.73949">
+    <ele>4.220000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.24729000000001" lon="-122.73982000000001">
+    <ele>4.180000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.247310000000006" lon="-122.74004000000001">
+    <ele>4.220000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.24727000000001" lon="-122.74020000000002">
+    <ele>4.220000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.247060000000005" lon="-122.74062">
+    <ele>4.410000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.24703" lon="-122.74075">
+    <ele>4.51</ele>
+   </trkpt>
+   <trkpt lat="49.24703" lon="-122.74080000000001">
+    <ele>4.51</ele>
+   </trkpt>
+   <trkpt lat="49.24694" lon="-122.74094000000001">
+    <ele>4.61</ele>
+   </trkpt>
+   <trkpt lat="49.24692" lon="-122.74100000000001">
+    <ele>4.61</ele>
+   </trkpt>
+   <trkpt lat="49.24692" lon="-122.74101000000002">
+    <ele>4.61</ele>
+   </trkpt>
+   <trkpt lat="49.24685" lon="-122.74123000000002">
+    <ele>4.710000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.24678" lon="-122.74230000000001">
+    <ele>4.85</ele>
+   </trkpt>
+   <trkpt lat="49.24683" lon="-122.7424">
+    <ele>4.85</ele>
+   </trkpt>
+   <trkpt lat="49.24723" lon="-122.74124">
+    <ele>2.85</ele>
+   </trkpt>
+   <trkpt lat="49.24745" lon="-122.7407">
+    <ele>1.9100000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.24788" lon="-122.73991000000001">
+    <ele>0.9400000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.24832000000001" lon="-122.73928000000001">
+    <ele>1.8</ele>
+   </trkpt>
+   <trkpt lat="49.248520000000006" lon="-122.73905">
+    <ele>2.35</ele>
+   </trkpt>
+   <trkpt lat="49.24882" lon="-122.73874">
+    <ele>3.7600000000000002</ele>
+   </trkpt>
+   <trkpt lat="49.248830000000005" lon="-122.73869">
+    <ele>3.7600000000000002</ele>
+   </trkpt>
+   <trkpt lat="49.24909" lon="-122.73837">
+    <ele>4.17</ele>
+   </trkpt>
+   <trkpt lat="49.249370000000006" lon="-122.73774000000002">
+    <ele>4.38</ele>
+   </trkpt>
+   <trkpt lat="49.249390000000005" lon="-122.73757">
+    <ele>4.38</ele>
+   </trkpt>
+   <trkpt lat="49.249390000000005" lon="-122.73676">
+    <ele>4.260000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.249390000000005" lon="-122.73610000000001">
+    <ele>4.19</ele>
+   </trkpt>
+   <trkpt lat="49.24936" lon="-122.73547">
+    <ele>4.07</ele>
+   </trkpt>
+   <trkpt lat="49.2487850000613" lon="-122.7354800001154">
+    <ele>3.52</ele>
+   </trkpt>
+   <trkpt lat="49.24821000000001" lon="-122.73549000000001">
+    <ele>3.85</ele>
+   </trkpt>
+   <trkpt lat="49.24823000000001" lon="-122.73440000000001">
+    <ele>4.28</ele>
+   </trkpt>
+   <trkpt lat="49.248270000000005" lon="-122.73422000000001">
+    <ele>4.540000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.248050000000006" lon="-122.73388000000001">
+    <ele>6.25</ele>
+   </trkpt>
+   <trkpt lat="49.24808" lon="-122.73378000000001">
+    <ele>6.390000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.2486" lon="-122.73286000000002">
+    <ele>7.2</ele>
+   </trkpt>
+   <trkpt lat="49.24870000000001" lon="-122.73271000000001">
+    <ele>7.44</ele>
+   </trkpt>
+   <trkpt lat="49.24873" lon="-122.73255">
+    <ele>7.260000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.24870000000001" lon="-122.73231000000001">
+    <ele>7.2</ele>
+   </trkpt>
+   <trkpt lat="49.24870000000001" lon="-122.73225000000001">
+    <ele>7.21</ele>
+   </trkpt>
+   <trkpt lat="49.24875" lon="-122.73197">
+    <ele>7.08</ele>
+   </trkpt>
+   <trkpt lat="49.24879000000001" lon="-122.73184">
+    <ele>7.050000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.248940000000005" lon="-122.73166">
+    <ele>7.04</ele>
+   </trkpt>
+   <trkpt lat="49.24915000000001" lon="-122.73148">
+    <ele>6.98</ele>
+   </trkpt>
+   <trkpt lat="49.24925" lon="-122.73143">
+    <ele>6.99</ele>
+   </trkpt>
+   <trkpt lat="49.2494" lon="-122.73144">
+    <ele>7.140000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.249570000000006" lon="-122.73153">
+    <ele>7.2</ele>
+   </trkpt>
+   <trkpt lat="49.2494" lon="-122.73144">
+    <ele>7.140000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.24935000000001" lon="-122.73144">
+    <ele>7.07</ele>
+   </trkpt>
+   <trkpt lat="49.2494" lon="-122.73144">
+    <ele>7.0600000000000005</ele>
+   </trkpt>
+   <trkpt lat="49.249570000000006" lon="-122.73153">
+    <ele>7.2</ele>
+   </trkpt>
+   <trkpt lat="49.24980000000001" lon="-122.73119000000001">
+    <ele>6.99</ele>
+   </trkpt>
+   <trkpt lat="49.250420000000005" lon="-122.73055000000001">
+    <ele>7.090000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.25048" lon="-122.73059">
+    <ele>7.090000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.250550000000004" lon="-122.73075000000001">
+    <ele>7.08</ele>
+   </trkpt>
+   <trkpt lat="49.25056000000001" lon="-122.73094">
+    <ele>7.03</ele>
+   </trkpt>
+   <trkpt lat="49.2501" lon="-122.73148">
+    <ele>6.7</ele>
+   </trkpt>
+   <trkpt lat="49.250040000000006" lon="-122.73161">
+    <ele>6.57</ele>
+   </trkpt>
+   <trkpt lat="49.25003" lon="-122.73175">
+    <ele>6.57</ele>
+   </trkpt>
+   <trkpt lat="49.250060000000005" lon="-122.73192000000002">
+    <ele>6.57</ele>
+   </trkpt>
+   <trkpt lat="49.25038000000001" lon="-122.73282">
+    <ele>6.55</ele>
+   </trkpt>
+   <trkpt lat="49.250440000000005" lon="-122.73287">
+    <ele>6.55</ele>
+   </trkpt>
+   <trkpt lat="49.250600000000006" lon="-122.73287">
+    <ele>6.51</ele>
+   </trkpt>
+   <trkpt lat="49.25061" lon="-122.73286000000002">
+    <ele>6.51</ele>
+   </trkpt>
+   <trkpt lat="49.25061" lon="-122.73287">
+    <ele>6.51</ele>
+   </trkpt>
+   <trkpt lat="49.25067000000001" lon="-122.73282">
+    <ele>6.51</ele>
+   </trkpt>
+   <trkpt lat="49.251176669812345" lon="-122.7322200122702">
+    <ele>6.470000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.25168333651767" lon="-122.73162001222457">
+    <ele>6.46</ele>
+   </trkpt>
+   <trkpt lat="49.252190000000006" lon="-122.73102000000002">
+    <ele>6.410000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.25257500106526" lon="-122.73051000405329">
+    <ele>6.29</ele>
+   </trkpt>
+   <trkpt lat="49.25296" lon="-122.73">
+    <ele>6.180000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.2531" lon="-122.72976000000001">
+    <ele>6.180000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.253130000000006" lon="-122.72964">
+    <ele>6.17</ele>
+   </trkpt>
+   <trkpt lat="49.25316" lon="-122.72937">
+    <ele>6.17</ele>
+   </trkpt>
+   <trkpt lat="49.25314" lon="-122.72905000000002">
+    <ele>6.21</ele>
+   </trkpt>
+   <trkpt lat="49.253130000000006" lon="-122.72889">
+    <ele>6.21</ele>
+   </trkpt>
+   <trkpt lat="49.252930000000006" lon="-122.72794">
+    <ele>6.34</ele>
+   </trkpt>
+   <trkpt lat="49.252930000000006" lon="-122.72772">
+    <ele>6.390000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.25302000000001" lon="-122.72736">
+    <ele>6.49</ele>
+   </trkpt>
+   <trkpt lat="49.25312" lon="-122.72718">
+    <ele>6.49</ele>
+   </trkpt>
+   <trkpt lat="49.253240000000005" lon="-122.72702000000001">
+    <ele>6.470000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.253645001087854" lon="-122.72654000382725">
+    <ele>6.44</ele>
+   </trkpt>
+   <trkpt lat="49.25405000000001" lon="-122.72606">
+    <ele>6.42</ele>
+   </trkpt>
+   <trkpt lat="49.25450000000001" lon="-122.72556000000002">
+    <ele>6.4</ele>
+   </trkpt>
+   <trkpt lat="49.25505000148597" lon="-122.72496000675919">
+    <ele>6.38</ele>
+   </trkpt>
+   <trkpt lat="49.2556" lon="-122.72436">
+    <ele>6.410000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.255720000000004" lon="-122.72425000000001">
+    <ele>6.430000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.25571" lon="-122.72425000000001">
+    <ele>6.430000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.255880000000005" lon="-122.7241">
+    <ele>6.48</ele>
+   </trkpt>
+   <trkpt lat="49.256060000000005" lon="-122.724">
+    <ele>6.48</ele>
+   </trkpt>
+   <trkpt lat="49.25678000111327" lon="-122.72364667695766">
+    <ele>6.390000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.2575000011491" lon="-122.72329334360693">
+    <ele>6.5200000000000005</ele>
+   </trkpt>
+   <trkpt lat="49.25822" lon="-122.72294000000001">
+    <ele>6.390000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.258680000000005" lon="-122.72275">
+    <ele>6.51</ele>
+   </trkpt>
+   <trkpt lat="49.25902000000001" lon="-122.72248">
+    <ele>6.51</ele>
+   </trkpt>
+   <trkpt lat="49.25939" lon="-122.72231000000001">
+    <ele>6.51</ele>
+   </trkpt>
+   <trkpt lat="49.26012500075671" lon="-122.72188500634272">
+    <ele>6.5200000000000005</ele>
+   </trkpt>
+   <trkpt lat="49.26086" lon="-122.72146000000001">
+    <ele>6.57</ele>
+   </trkpt>
+   <trkpt lat="49.26086" lon="-122.72147000000001">
+    <ele>6.57</ele>
+   </trkpt>
+   <trkpt lat="49.261443334308275" lon="-122.7211400077817">
+    <ele>6.61</ele>
+   </trkpt>
+   <trkpt lat="49.26202666767675" lon="-122.72081000776195">
+    <ele>6.580000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.26261" lon="-122.72048000000001">
+    <ele>6.5600000000000005</ele>
+   </trkpt>
+   <trkpt lat="49.26318333453774" lon="-122.72011667506828">
+    <ele>6.580000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.26375666793622" lon="-122.71975334169376">
+    <ele>6.57</ele>
+   </trkpt>
+   <trkpt lat="49.26433" lon="-122.71939">
+    <ele>6.470000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.26483" lon="-122.71903">
+    <ele>6.49</ele>
+   </trkpt>
+   <trkpt lat="49.26547333473534" lon="-122.71862667718537">
+    <ele>6.55</ele>
+   </trkpt>
+   <trkpt lat="49.266116668066786" lon="-122.71822334385341">
+    <ele>6.53</ele>
+   </trkpt>
+   <trkpt lat="49.266760000000005" lon="-122.71782">
+    <ele>6.450000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.266920000000006" lon="-122.71769">
+    <ele>6.46</ele>
+   </trkpt>
+   <trkpt lat="49.267050000000005" lon="-122.71755000000002">
+    <ele>6.53</ele>
+   </trkpt>
+   <trkpt lat="49.26753" lon="-122.71684">
+    <ele>6.49</ele>
+   </trkpt>
+   <trkpt lat="49.26769" lon="-122.71666">
+    <ele>6.49</ele>
+   </trkpt>
+   <trkpt lat="49.26802000000001" lon="-122.71639">
+    <ele>6.540000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.26836" lon="-122.71612">
+    <ele>6.580000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.26908" lon="-122.71568">
+    <ele>6.59</ele>
+   </trkpt>
+   <trkpt lat="49.269070000000006" lon="-122.71568">
+    <ele>6.59</ele>
+   </trkpt>
+   <trkpt lat="49.26970000135315" lon="-122.71529000993543">
+    <ele>6.640000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.27033000139373" lon="-122.71490000991047">
+    <ele>6.57</ele>
+   </trkpt>
+   <trkpt lat="49.27096" lon="-122.71451">
+    <ele>6.44</ele>
+   </trkpt>
+   <trkpt lat="49.271240000000006" lon="-122.71429">
+    <ele>6.44</ele>
+   </trkpt>
+   <trkpt lat="49.27171000042152" lon="-122.71402000251095">
+    <ele>6.4</ele>
+   </trkpt>
+   <trkpt lat="49.272180000000006" lon="-122.71375">
+    <ele>6.3500000000000005</ele>
+   </trkpt>
+   <trkpt lat="49.27266500011101" lon="-122.7135900015729">
+    <ele>6.450000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.27315" lon="-122.71343000000002">
+    <ele>6.390000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.273655000194154" lon="-122.71323000203898">
+    <ele>6.46</ele>
+   </trkpt>
+   <trkpt lat="49.27416" lon="-122.71303">
+    <ele>6.470000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.274420000000006" lon="-122.71285">
+    <ele>6.51</ele>
+   </trkpt>
+   <trkpt lat="49.27469000000001" lon="-122.71264000000001">
+    <ele>6.51</ele>
+   </trkpt>
+   <trkpt lat="49.27518000041414" lon="-122.7123450029073">
+    <ele>6.46</ele>
+   </trkpt>
+   <trkpt lat="49.275670000000005" lon="-122.71205">
+    <ele>6.470000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.276396667954735" lon="-122.71165334505945">
+    <ele>6.470000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.277123334551675" lon="-122.71125667843107">
+    <ele>6.37</ele>
+   </trkpt>
+   <trkpt lat="49.27785" lon="-122.71086000000001">
+    <ele>6.470000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.27785" lon="-122.71087000000001">
+    <ele>6.470000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.278310000000005" lon="-122.71062">
+    <ele>6.5200000000000005</ele>
+   </trkpt>
+   <trkpt lat="49.27848" lon="-122.71061000000002">
+    <ele>6.53</ele>
+   </trkpt>
+   <trkpt lat="49.27857" lon="-122.71062">
+    <ele>6.5600000000000005</ele>
+   </trkpt>
+   <trkpt lat="49.278760000000005" lon="-122.71070000000002">
+    <ele>6.540000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.27888" lon="-122.7108">
+    <ele>6.540000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.278980000000004" lon="-122.71097">
+    <ele>6.580000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.27913" lon="-122.71139000000001">
+    <ele>6.5600000000000005</ele>
+   </trkpt>
+   <trkpt lat="49.27934000273942" lon="-122.71218499666176">
+    <ele>6.65</ele>
+   </trkpt>
+   <trkpt lat="49.27955000000001" lon="-122.71298000000002">
+    <ele>6.640000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.27974000160805" lon="-122.71360499733751">
+    <ele>6.580000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.27993000000001" lon="-122.71423000000001">
+    <ele>6.53</ele>
+   </trkpt>
+   <trkpt lat="49.28018" lon="-122.71516000000001">
+    <ele>6.61</ele>
+   </trkpt>
+   <trkpt lat="49.2804450034181" lon="-122.71604999521905">
+    <ele>6.5600000000000005</ele>
+   </trkpt>
+   <trkpt lat="49.280710000000006" lon="-122.71694000000001">
+    <ele>6.61</ele>
+   </trkpt>
+   <trkpt lat="49.28076" lon="-122.7172">
+    <ele>6.61</ele>
+   </trkpt>
+   <trkpt lat="49.28087202290356" lon="-122.71835198952859">
+    <ele>6.68</ele>
+   </trkpt>
+   <trkpt lat="49.28098403435514" lon="-122.71950398429055">
+    <ele>6.8100000000000005</ele>
+   </trkpt>
+   <trkpt lat="49.28109603435469" lon="-122.72065598428539">
+    <ele>6.620000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.2812080229021" lon="-122.72180798951261">
+    <ele>6.66</ele>
+   </trkpt>
+   <trkpt lat="49.28132" lon="-122.72296000000001">
+    <ele>6.73</ele>
+   </trkpt>
+   <trkpt lat="49.28141" lon="-122.72378">
+    <ele>6.74</ele>
+   </trkpt>
+   <trkpt lat="49.281400000000005" lon="-122.72423">
+    <ele>6.73</ele>
+   </trkpt>
+   <trkpt lat="49.28134334196604" lon="-122.72523000223968">
+    <ele>6.760000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.281286675302674" lon="-122.72623000218135">
+    <ele>6.630000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28123" lon="-122.72723">
+    <ele>6.670000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28123" lon="-122.72770000000001">
+    <ele>6.66</ele>
+   </trkpt>
+   <trkpt lat="49.281290000000006" lon="-122.72809000000001">
+    <ele>6.73</ele>
+   </trkpt>
+   <trkpt lat="49.281420000000004" lon="-122.72839">
+    <ele>6.640000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.281600000000005" lon="-122.72865000000002">
+    <ele>6.640000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28207500088076" lon="-122.72909999567216">
+    <ele>6.66</ele>
+   </trkpt>
+   <trkpt lat="49.28255" lon="-122.72955">
+    <ele>6.78</ele>
+   </trkpt>
+   <trkpt lat="49.282770000000006" lon="-122.72969">
+    <ele>6.78</ele>
+   </trkpt>
+   <trkpt lat="49.28326500019148" lon="-122.72989499794635">
+    <ele>6.73</ele>
+   </trkpt>
+   <trkpt lat="49.28376" lon="-122.73010000000001">
+    <ele>6.640000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.2839" lon="-122.73019000000001">
+    <ele>6.640000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28403" lon="-122.73033000000001">
+    <ele>6.640000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28425000000001" lon="-122.73077">
+    <ele>6.630000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28471500546168" lon="-122.7318999892279">
+    <ele>6.710000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.285180000000004" lon="-122.73303000000001">
+    <ele>6.920000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.285360000000004" lon="-122.73346000000001">
+    <ele>7.04</ele>
+   </trkpt>
+   <trkpt lat="49.28538" lon="-122.73349">
+    <ele>7.04</ele>
+   </trkpt>
+   <trkpt lat="49.28538" lon="-122.73388000000001">
+    <ele>7.04</ele>
+   </trkpt>
+   <trkpt lat="49.28557000000001" lon="-122.73394">
+    <ele>7.010000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28566000000001" lon="-122.73400000000001">
+    <ele>7.0200000000000005</ele>
+   </trkpt>
+   <trkpt lat="49.285830000000004" lon="-122.73346000000001">
+    <ele>6.300000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28576" lon="-122.73336">
+    <ele>6.300000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28549" lon="-122.73270000000001">
+    <ele>6.38</ele>
+   </trkpt>
+   <trkpt lat="49.28513500335596" lon="-122.73181499357011">
+    <ele>6.3500000000000005</ele>
+   </trkpt>
+   <trkpt lat="49.284780000000005" lon="-122.73093000000001">
+    <ele>6.5200000000000005</ele>
+   </trkpt>
+   <trkpt lat="49.284545001498806" lon="-122.7303299970014">
+    <ele>6.65</ele>
+   </trkpt>
+   <trkpt lat="49.284310000000005" lon="-122.72973">
+    <ele>6.670000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28426" lon="-122.72951">
+    <ele>6.670000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.284220000000005" lon="-122.72911">
+    <ele>6.750000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28417" lon="-122.7287">
+    <ele>6.85</ele>
+   </trkpt>
+   <trkpt lat="49.2841" lon="-122.72852">
+    <ele>6.85</ele>
+   </trkpt>
+   <trkpt lat="49.28394" lon="-122.72831000000001">
+    <ele>6.85</ele>
+   </trkpt>
+   <trkpt lat="49.28356" lon="-122.72791000000001">
+    <ele>6.7</ele>
+   </trkpt>
+   <trkpt lat="49.282990000000005" lon="-122.72731000000002">
+    <ele>6.540000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.282270000000004" lon="-122.72669">
+    <ele>6.32</ele>
+   </trkpt>
+   <trkpt lat="49.282160000000005" lon="-122.72656">
+    <ele>6.3100000000000005</ele>
+   </trkpt>
+   <trkpt lat="49.282070000000004" lon="-122.72630000000001">
+    <ele>6.3100000000000005</ele>
+   </trkpt>
+   <trkpt lat="49.28204" lon="-122.72602">
+    <ele>6.37</ele>
+   </trkpt>
+   <trkpt lat="49.28206" lon="-122.72553">
+    <ele>6.4</ele>
+   </trkpt>
+   <trkpt lat="49.28228000000001" lon="-122.72457000000001">
+    <ele>6.450000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28228000000001" lon="-122.72458">
+    <ele>6.450000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28238" lon="-122.72418">
+    <ele>6.390000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28247" lon="-122.72396">
+    <ele>6.3100000000000005</ele>
+   </trkpt>
+   <trkpt lat="49.282590000000006" lon="-122.72377000000002">
+    <ele>6.260000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28311" lon="-122.72311">
+    <ele>5.82</ele>
+   </trkpt>
+   <trkpt lat="49.283190000000005" lon="-122.72289">
+    <ele>5.78</ele>
+   </trkpt>
+   <trkpt lat="49.283210000000004" lon="-122.72275">
+    <ele>5.78</ele>
+   </trkpt>
+   <trkpt lat="49.28322000000001" lon="-122.72212">
+    <ele>6.010000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28318" lon="-122.72194">
+    <ele>6.010000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28307" lon="-122.72179000000001">
+    <ele>5.970000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28278" lon="-122.72136">
+    <ele>6.0200000000000005</ele>
+   </trkpt>
+   <trkpt lat="49.28219000000001" lon="-122.7206">
+    <ele>6.2700000000000005</ele>
+   </trkpt>
+   <trkpt lat="49.282120000000006" lon="-122.72042">
+    <ele>6.280000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28208" lon="-122.72029">
+    <ele>6.280000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.2819050056735" lon="-122.71914499604696">
+    <ele>6.07</ele>
+   </trkpt>
+   <trkpt lat="49.28173" lon="-122.718">
+    <ele>6.07</ele>
+   </trkpt>
+   <trkpt lat="49.281720000000005" lon="-122.71788000000001">
+    <ele>6.07</ele>
+   </trkpt>
+   <trkpt lat="49.28146" lon="-122.71702">
+    <ele>5.890000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28128" lon="-122.71625000000002">
+    <ele>5.800000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.281130000000005" lon="-122.71532">
+    <ele>6.1000000000000005</ele>
+   </trkpt>
+   <trkpt lat="49.28119500545258" lon="-122.71419500162476">
+    <ele>6.03</ele>
+   </trkpt>
+   <trkpt lat="49.28126" lon="-122.71307000000002">
+    <ele>6.010000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28126" lon="-122.7129">
+    <ele>6.010000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28123" lon="-122.71274000000001">
+    <ele>6.11</ele>
+   </trkpt>
+   <trkpt lat="49.281180000000006" lon="-122.71264000000001">
+    <ele>6.130000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28079500063432" lon="-122.71224999693311">
+    <ele>6.130000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28041" lon="-122.71186000000002">
+    <ele>5.970000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.280170000000005" lon="-122.71156">
+    <ele>5.960000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.280060000000006" lon="-122.71137000000002">
+    <ele>5.920000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.27996" lon="-122.71111">
+    <ele>5.94</ele>
+   </trkpt>
+   <trkpt lat="49.279790000000006" lon="-122.71048">
+    <ele>6.0</ele>
+   </trkpt>
+   <trkpt lat="49.279790000000006" lon="-122.71036000000001">
+    <ele>6.0</ele>
+   </trkpt>
+   <trkpt lat="49.27987" lon="-122.70981">
+    <ele>5.9</ele>
+   </trkpt>
+   <trkpt lat="49.27993000000001" lon="-122.70959">
+    <ele>5.87</ele>
+   </trkpt>
+   <trkpt lat="49.28004000000001" lon="-122.70942000000001">
+    <ele>5.87</ele>
+   </trkpt>
+   <trkpt lat="49.280170000000005" lon="-122.70926000000001">
+    <ele>5.890000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28016" lon="-122.70926000000001">
+    <ele>5.890000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28087000000001" lon="-122.70842">
+    <ele>5.87</ele>
+   </trkpt>
+   <trkpt lat="49.281245001003875" lon="-122.70793500370235">
+    <ele>6.1000000000000005</ele>
+   </trkpt>
+   <trkpt lat="49.281620000000004" lon="-122.70745000000001">
+    <ele>6.010000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28228000000001" lon="-122.70663">
+    <ele>5.840000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28228000000001" lon="-122.70664000000001">
+    <ele>5.840000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28282333722535" lon="-122.70597001474195">
+    <ele>5.87</ele>
+   </trkpt>
+   <trkpt lat="49.283366670577095" lon="-122.70530001471947">
+    <ele>5.840000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.283910000000006" lon="-122.70463000000001">
+    <ele>5.750000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.284290000000006" lon="-122.70409000000001">
+    <ele>5.87</ele>
+   </trkpt>
+   <trkpt lat="49.28448" lon="-122.70377">
+    <ele>5.9</ele>
+   </trkpt>
+   <trkpt lat="49.28492667381185" lon="-122.70286001648806">
+    <ele>6.0</ele>
+   </trkpt>
+   <trkpt lat="49.28537334047799" lon="-122.70195001648939">
+    <ele>5.85</ele>
+   </trkpt>
+   <trkpt lat="49.28582" lon="-122.70104">
+    <ele>5.91</ele>
+   </trkpt>
+   <trkpt lat="49.28602" lon="-122.70051000000001">
+    <ele>5.82</ele>
+   </trkpt>
+   <trkpt lat="49.28602" lon="-122.70052000000001">
+    <ele>5.82</ele>
+   </trkpt>
+   <trkpt lat="49.286100000000005" lon="-122.70032">
+    <ele>5.83</ele>
+   </trkpt>
+   <trkpt lat="49.28648003158585" lon="-122.69911004662326">
+    <ele>5.81</ele>
+   </trkpt>
+   <trkpt lat="49.286860050538564" lon="-122.69790007459484">
+    <ele>5.960000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.28724005685776" lon="-122.69669008391483">
+    <ele>5.9</ele>
+   </trkpt>
+   <trkpt lat="49.287620050543076" lon="-122.69548007458333">
+    <ele>6.2</ele>
+   </trkpt>
+   <trkpt lat="49.288000031594144" lon="-122.69427004660044">
+    <ele>6.0200000000000005</ele>
+   </trkpt>
+   <trkpt lat="49.288380000000004" lon="-122.69306000000002">
+    <ele>6.12</ele>
+   </trkpt>
+   <trkpt lat="49.288565002840556" lon="-122.69226000265918">
+    <ele>6.04</ele>
+   </trkpt>
+   <trkpt lat="49.28875000000001" lon="-122.69146">
+    <ele>6.03</ele>
+   </trkpt>
+   <trkpt lat="49.28898000352367" lon="-122.69056000408555">
+    <ele>5.930000000000001</ele>
+   </trkpt>
+   <trkpt lat="49.289210000000004" lon="-122.68966">
+    <ele>5.91</ele>
+   </trkpt>
+   <trkpt lat="49.28929" lon="-122.68944">
+    <ele>5.82</ele>
+   </trkpt>
   </trkseg>
  </trk>
 </gpx>
   </script>
 
-  <!-- Application Engine & Web Bluetooth Integration -->
+  <!-- Main JavaScript Engine -->
   <script>
-    /* ==========================================================================
-       1. GLOBAL CONSTANTS & BLE UUID DEFINITIONS
-       ========================================================================== */
-    const UUID_FTMS_SERVICE = 0x1826;             // Fitness Machine Service
-    const UUID_INDOOR_BIKE_DATA = 0x2AD2;         // Indoor Bike Data Characteristic
-    const UUID_FITNESS_MACHINE_CONTROL = 0x2AD9;  // Control Point Characteristic
-
-    const UUID_HR_SERVICE = 0x180D;               // Heart Rate Service
-    const UUID_HR_MEASUREMENT = 0x2A37;           // Heart Rate Measurement
-
-    const UUID_TACX_FEC_SERVICE = '6e40fec1-b5a3-f393-e0a9-e50e24dcca9e';
-
-    /* ==========================================================================
-       2. APPLICATION STATE
-       ========================================================================== */
-    let appState = {
-      isRiding: false,
-      isDemoMode: false,
-      controlMode: 'SIM',
+    // Application State Management
+    const App = {
+      map: null,
+      polyline: null,
+      riderMarker: null,
+      routeData: [], // {lat, lng, ele, dist, gradient}
+      totalDistance: 0, // km
+      currentDist: 0,   // km
+      currentSpeed: 0,  // km/h
+      currentPower: 0,  // Watts
+      currentHR: 0,     // BPM
+      currentCadence: 0,// RPM
+      currentGradient: 0, // %
+      
+      // Bluetooth Device References
+      trainerDevice: null,
+      ftmsControlPoint: null,
+      hrDevice: null,
+      
+      // Target Watts for ERG Mode
       targetWatts: 150,
       
-      trainerDevice: null,
-      trainerControlChar: null,
-      hrDevice: null,
-
-      power: 0,
-      powerHistory: [],
-      maxPower: 0,
-      cadence: 0,
-      cadenceHistory: [],
-      speed: 0,
-      speedHistory: [],
-      heartRate: 0,
+      // Simulation / Demo Mode
+      isSimulating: false,
+      simInterval: null,
       
-      elapsedSeconds: 0,
-      timerInterval: null,
-      distanceKm: 0,
-      currentGradient: 0,
-      currentRouteIndex: 0,
-      
-      routeData: []
+      // Tacx & Standard FTMS Service UUIDs
+      UUID: {
+        FTMS_SERVICE: '00001826-0000-1000-8000-00805f9b34fb',
+        INDOOR_BIKE_DATA: '00002ad2-0000-1000-8000-00805f9b34fb',
+        FITNESS_CONTROL_POINT: '00002ad9-0000-1000-8000-00805f9b34fb',
+        FITNESS_FEATURE: '00002acc-0000-1000-8000-00805f9b34fb',
+        HR_SERVICE: '0000180d-0000-1000-8000-00805f9b34fb',
+        HR_MEASUREMENT: '00002a37-0000-1000-8000-00805f9b34fb'
+      }
     };
 
-    let map = null;
-    let polylineTrack = null;
-    let riderMarker = null;
-
-    /* ==========================================================================
-       3. INITIALIZATION & RESIZE SAFEGUARDS
-       ========================================================================== */
+    // Global Initialization on Window Load
     window.addEventListener('DOMContentLoaded', () => {
-      logDiagnostic('Initializing Velovet Ride Engine...');
       initMap();
-      loadEmbeddedGPX();
-      
-      // Force Map & Chart refresh to prevent blank container issues
-      const triggerResize = () => {
-        if (map) map.invalidateSize();
-        drawElevationChart();
-      };
-
-      setTimeout(triggerResize, 100);
-      setTimeout(triggerResize, 500);
-      window.addEventListener('resize', triggerResize);
+      parseEmbeddedGPX();
+      initCanvas();
+      setupEventListeners();
+      checkWebBluetoothSupport();
     });
 
-    function logDiagnostic(msg, isError = false) {
-      const logContainer = document.getElementById('diagnostic-log');
-      if (!logContainer) return;
-      const timestamp = new Date().toLocaleTimeString();
-      const div = document.createElement('div');
-      div.className = isError ? 'text-rose-400 font-bold' : 'text-emerald-400';
-      div.textContent = `[${timestamp}] ${msg}`;
-      logContainer.appendChild(div);
-      logContainer.scrollTop = logContainer.scrollHeight;
+    // Logging Utility
+    function log(msg, type = 'info') {
+      const drawer = document.getElementById('diagnostic-drawer');
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      const time = new Date().toLocaleTimeString();
+      entry.innerText = `[${time}] ${msg}`;
+      drawer.appendChild(entry);
+      drawer.scrollTop = drawer.scrollHeight;
+      console.log(`[Velovet Ride] ${msg}`);
     }
 
-    function clearDiagnosticLogs() {
-      document.getElementById('diagnostic-log').innerHTML = '';
-    }
-
-    /* ==========================================================================
-       4. GPX PARSING & ROUTE MANAGEMENT
-       ========================================================================== */
-    function loadEmbeddedGPX() {
-      try {
-        const rawGpx = document.getElementById('preset-gpx-data').textContent;
-        parseAndSetGPX(rawGpx);
-      } catch (err) {
-        logDiagnostic(`Error loading embedded GPX: ${err.message}`, true);
+    // Check BLE Browser Support
+    function checkWebBluetoothSupport() {
+      if (!navigator.bluetooth) {
+        log('Web Bluetooth is NOT supported in this browser. Please use Bluefy or WebBLE on iOS.', 'warn');
+      } else {
+        log('Web Bluetooth API detected.', 'success');
       }
     }
 
-    function handleGPXUpload(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        parseAndSetGPX(e.target.result);
-        logDiagnostic(`Uploaded GPX route '${file.name}' loaded.`);
-      };
-      reader.readAsText(file);
+    // Initialize Interactive Leaflet Map
+    function initMap() {
+      App.map = L.map('map', {
+        zoomControl: false,
+        attributionControl: false
+      }).setView([49.23517, -122.7676], 14);
+
+      // High contrast Dark Tile Layer
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        maxZoom: 19,
+        subdomains: 'abcd'
+      }).addTo(App.map);
+
+      // Re-invalidate map bounds after layout renders
+      setTimeout(() => App.map.invalidateSize(), 300);
     }
 
-    function parseAndSetGPX(gpxXmlString) {
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(gpxXmlString, "text/xml");
-      const trkpts = xmlDoc.getElementsByTagName("trkpt");
-
-      if (!trkpts || trkpts.length < 2) {
-        logDiagnostic("Invalid GPX structure.", true);
-        return;
-      }
-
-      let parsedPoints = [];
-      let accumulatedDistance = 0;
-
-      for (let i = 0; i < trkpts.length; i++) {
-        const pt = trkpts[i];
-        const lat = parseFloat(pt.getAttribute("lat"));
-        const lon = parseFloat(pt.getAttribute("lon"));
-        const eleNode = pt.getElementsByTagName("ele")[0];
-        const ele = eleNode ? parseFloat(eleNode.textContent) : 0;
-
-        if (i > 0) {
-          const prev = parsedPoints[i - 1];
-          const dist = calculateHaversineDistance(prev.lat, prev.lon, lat, lon);
-          accumulatedDistance += dist;
-          
-          const eleDiff = ele - prev.ele;
-          const gradient = dist > 0 ? (eleDiff / (dist * 1000)) * 100 : 0;
-          parsedPoints[i - 1].gradient = gradient;
-        }
-
-        parsedPoints.push({ lat, lon, ele, distFromStart: accumulatedDistance, gradient: 0 });
-      }
-
-      appState.routeData = parsedPoints;
-      appState.currentRouteIndex = 0;
-
-      const nameNode = xmlDoc.getElementsByTagName("name")[0];
-      if (nameNode && nameNode.textContent) {
-        document.getElementById('route-title').textContent = nameNode.textContent;
-      }
-
-      renderRouteOnMap();
-      drawElevationChart();
-      logDiagnostic(`GPX Route loaded: ${parsedPoints.length} points, ${accumulatedDistance.toFixed(2)} km.`);
-    }
-
-    function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
-      const R = 6371;
+    // Haversine Distance Calculation (km)
+    function calcDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371; // Earth radius in km
       const dLat = (lat2 - lat1) * Math.PI / 180;
       const dLon = (lon2 - lon1) * Math.PI / 180;
       const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
                 Math.sin(dLon/2) * Math.sin(dLon/2);
       return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     }
 
-    /* ==========================================================================
-       5. LEAFLET MAP & RIDER RENDERING
-       ========================================================================== */
-    function initMap() {
-      map = L.map('map', { zoomControl: false }).setView([49.245, -122.740], 13);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap'
-      }).addTo(map);
-      L.control.zoom({ position: 'bottomright' }).addTo(map);
-    }
+    // Robust Safe Parsing of Embedded XML GPX String
+    function parseEmbeddedGPX() {
+      try {
+        const rawXml = document.getElementById('preset-gpx-data').textContent.trim();
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(rawXml, 'application/xml');
+        
+        const parseErrors = xmlDoc.getElementsByTagName('parsererror');
+        if (parseErrors.length > 0) {
+          log('GPX XML Parsing Error: ' + parseErrors[0].textContent, 'err');
+          return;
+        }
 
-    function renderRouteOnMap() {
-      if (!map || appState.routeData.length === 0) return;
+        const trkpts = xmlDoc.getElementsByTagName('trkpt');
+        if (trkpts.length === 0) {
+          log('No track points (<trkpt>) found in GPX.', 'err');
+          return;
+        }
 
-      const latLons = appState.routeData.map(p => [p.lat, p.lon]);
+        App.routeData = [];
+        let cumDist = 0;
+        const latLngs = [];
 
-      if (polylineTrack) map.removeLayer(polylineTrack);
-      if (riderMarker) map.removeLayer(riderMarker);
+        for (let i = 0; i < trkpts.length; i++) {
+          const pt = trkpts[i];
+          const lat = parseFloat(pt.getAttribute('lat'));
+          const lng = parseFloat(pt.getAttribute('lon'));
+          const eleNode = pt.getElementsByTagName('ele')[0];
+          const ele = eleNode ? parseFloat(eleNode.textContent) : 0;
 
-      polylineTrack = L.polyline(latLons, {
-        color: '#FF5500',
-        weight: 5,
-        opacity: 0.9,
-        lineCap: 'round'
-      }).addTo(map);
+          if (i > 0) {
+            const prev = App.routeData[i - 1];
+            const d = calcDistance(prev.lat, prev.lng, lat, lng);
+            cumDist += d;
+            
+            // Calculate slope gradient (%) over segment
+            const deltaEle = ele - prev.ele;
+            const distMeters = d * 1000;
+            const grad = distMeters > 0 ? (deltaEle / distMeters) * 100 : 0;
+            App.routeData[i - 1].gradient = grad;
+          }
 
-      map.fitBounds(polylineTrack.getBounds(), { padding: [30, 30] });
+          App.routeData.push({
+            lat,
+            lng,
+            ele,
+            dist: cumDist,
+            gradient: 0
+          });
 
-      const riderIcon = L.divIcon({
-        className: 'custom-rider-marker',
-        html: `<div class="w-5 h-5 bg-zwift-blue rounded-full border-2 border-white shadow-[0_0_15px_#00A8FF] animate-pulse"></div>`,
-        iconSize: [20, 20],
-        iconAnchor: [10, 10]
-      });
+          latLngs.push([lat, lng]);
+        }
 
-      riderMarker = L.marker(latLons[0], { icon: riderIcon }).addTo(map);
-      map.invalidateSize();
-    }
+        App.totalDistance = cumDist;
+        log(`GPX Loaded: ${App.routeData.length} points, ${cumDist.toFixed(2)} km total route.`, 'success');
 
-    function updateRiderMapPosition() {
-      if (!riderMarker || appState.routeData.length === 0) return;
-      const pt = appState.routeData[appState.currentRouteIndex];
-      if (pt) {
-        riderMarker.setLatLng([pt.lat, pt.lon]);
-        map.panTo([pt.lat, pt.lon], { animate: true, duration: 0.5 });
+        // Draw Polyline on Map
+        if (App.polyline) App.map.removeLayer(App.polyline);
+        App.polyline = L.polyline(latLngs, {
+          color: '#ff6b00',
+          weight: 5,
+          opacity: 0.9,
+          lineJoin: 'round'
+        }).addTo(App.map);
+
+        App.map.fitBounds(App.polyline.getBounds(), { padding: [40, 40] });
+
+        // Add Rider Marker
+        const riderIcon = L.divIcon({
+          className: 'rider-leaflet-marker',
+          iconSize: [16, 16],
+          iconAnchor: [8, 8]
+        });
+
+        if (App.riderMarker) App.map.removeLayer(App.riderMarker);
+        App.riderMarker = L.marker([App.routeData[0].lat, App.routeData[0].lng], { icon: riderIcon }).addTo(App.map);
+
+        drawElevationProfile();
+
+      } catch (err) {
+        log('Error reading GPX structure: ' + err.message, 'err');
       }
     }
 
-    /* ==========================================================================
-       6. ELEVATION CHART
-       ========================================================================== */
-    function drawElevationChart() {
+    // Render Elevation Canvas Profile Graph
+    function drawElevationProfile() {
       const canvas = document.getElementById('elevation-canvas');
-      if (!canvas) return;
-
-      const rect = canvas.parentElement.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) return;
-      
+      const ctx = canvas.getContext('2d');
+      const rect = canvas.getBoundingClientRect();
       canvas.width = rect.width;
       canvas.height = rect.height;
 
-      const ctx = canvas.getContext('2d');
+      if (!App.routeData.length) return;
+
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      const route = appState.routeData;
-      if (route.length < 2) return;
+      const maxEle = Math.max(...App.routeData.map(p => p.ele)) + 5;
+      const minEle = Math.min(...App.routeData.map(p => p.ele)) - 2;
+      const totalD = App.totalDistance;
 
-      const totalDist = route[route.length - 1].distFromStart;
-      const elevations = route.map(p => p.ele);
-      const minEle = Math.min(...elevations) - 2;
-      const maxEle = Math.max(...elevations) + 5;
-
-      const width = canvas.width;
-      const height = canvas.height;
-
+      // Draw Gradient Filled Area
       ctx.beginPath();
-      ctx.moveTo(0, height);
+      ctx.moveTo(0, canvas.height);
 
-      for (let i = 0; i < route.length; i++) {
-        const x = (route[i].distFromStart / totalDist) * width;
-        const y = height - ((route[i].ele - minEle) / (maxEle - minEle)) * (height - 20);
-        ctx.lineTo(x, y);
-      }
+      App.routeData.forEach((pt, i) => {
+        const x = (pt.dist / totalD) * canvas.width;
+        const y = canvas.height - ((pt.ele - minEle) / (maxEle - minEle)) * (canvas.height - 20) - 10;
+        if (i === 0) ctx.lineTo(x, y);
+        else ctx.lineTo(x, y);
+      });
 
-      ctx.lineTo(width, height);
+      ctx.lineTo(canvas.width, canvas.height);
       ctx.closePath();
 
-      const gradient = ctx.createLinearGradient(0, 0, 0, height);
-      gradient.addColorStop(0, 'rgba(255, 85, 0, 0.5)');
-      gradient.addColorStop(1, 'rgba(255, 85, 0, 0.05)');
+      const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      gradient.addColorStop(0, 'rgba(255, 107, 0, 0.6)');
+      gradient.addColorStop(1, 'rgba(255, 107, 0, 0.05)');
       ctx.fillStyle = gradient;
       ctx.fill();
 
+      // Draw Profile Line
       ctx.beginPath();
-      for (let i = 0; i < route.length; i++) {
-        const x = (route[i].distFromStart / totalDist) * width;
-        const y = height - ((route[i].ele - minEle) / (maxEle - minEle)) * (height - 20);
+      App.routeData.forEach((pt, i) => {
+        const x = (pt.dist / totalD) * canvas.width;
+        const y = canvas.height - ((pt.ele - minEle) / (maxEle - minEle)) * (canvas.height - 20) - 10;
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
-      }
-      ctx.strokeStyle = '#FF5500';
+      });
+      ctx.strokeStyle = '#ff6b00';
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      if (appState.currentRouteIndex < route.length) {
-        const currentPt = route[appState.currentRouteIndex];
-        const rx = (currentPt.distFromStart / totalDist) * width;
-        const ry = height - ((currentPt.ele - minEle) / (maxEle - minEle)) * (height - 20);
-
+      // Render Current Rider Position Marker on Graph
+      if (App.currentDist >= 0) {
+        const rx = (App.currentDist / totalD) * canvas.width;
+        
+        // Vertical Indicator Line
         ctx.beginPath();
-        ctx.strokeStyle = '#00A8FF';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([4, 4]);
         ctx.moveTo(rx, 0);
-        ctx.lineTo(rx, height);
+        ctx.lineTo(rx, canvas.height);
+        ctx.strokeStyle = '#00f0ff';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([3, 3]);
         ctx.stroke();
         ctx.setLineDash([]);
 
+        // Rider Dot
+        const currentPt = getInterpolatedPoint(App.currentDist);
+        const ry = canvas.height - ((currentPt.ele - minEle) / (maxEle - minEle)) * (canvas.height - 20) - 10;
+
         ctx.beginPath();
-        ctx.arc(rx, ry, 6, 0, Math.PI * 2);
-        ctx.fillStyle = '#00A8FF';
+        ctx.arc(rx, ry, 5, 0, Math.PI * 2);
+        ctx.fillStyle = '#00f0ff';
         ctx.fill();
-        ctx.strokeStyle = '#FFFFFF';
+        ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2;
         ctx.stroke();
-
-        document.getElementById('profile-progress').textContent = 
-          `${currentPt.distFromStart.toFixed(2)} / ${totalDist.toFixed(2)} km`;
       }
     }
 
-    /* ==========================================================================
-       7. DEMO MODE & ENGINE CONTROLS
-       ========================================================================== */
-    function toggleDemoMode() {
-      appState.isDemoMode = !appState.isDemoMode;
-      const demoBtn = document.getElementById('btn-toggle-demo');
-      const startBtn = document.getElementById('btn-start-ride');
+    // Interpolate lat/lng/elevation at current distance along path
+    function getInterpolatedPoint(dist) {
+      if (dist <= 0) return App.routeData[0];
+      if (dist >= App.totalDistance) return App.routeData[App.routeData.length - 1];
 
-      if (appState.isDemoMode) {
-        demoBtn.className = "px-3 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 bg-purple-600 text-white border border-purple-400 shadow-lg shadow-purple-500/30";
-        document.getElementById('demo-mode-text').textContent = "Demo Mode Active";
-        
-        startBtn.disabled = false;
-        startBtn.className = "px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition bg-zwift-orange text-white hover:bg-orange-600 shadow-lg shadow-zwift-orange/30 animate-pulse";
-        startBtn.textContent = appState.isRiding ? "Pause Ride" : "Start Demo Ride";
-
-        logDiagnostic("Demo Mode enabled. Simulation active.");
-      } else {
-        demoBtn.className = "px-3 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 bg-purple-950/60 text-purple-300 border border-purple-500/40 hover:bg-purple-900/60";
-        document.getElementById('demo-mode-text').textContent = "Enable Demo Mode";
-
-        if (!appState.trainerDevice) {
-          startBtn.disabled = true;
-          startBtn.className = "px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700";
-          startBtn.textContent = "Waiting for Bluetooth devices...";
+      for (let i = 0; i < App.routeData.length - 1; i++) {
+        if (dist >= App.routeData[i].dist && dist <= App.routeData[i+1].dist) {
+          const p1 = App.routeData[i];
+          const p2 = App.routeData[i+1];
+          const ratio = (dist - p1.dist) / (p2.dist - p1.dist);
+          return {
+            lat: p1.lat + (p2.lat - p1.lat) * ratio,
+            lng: p1.lng + (p2.lng - p1.lng) * ratio,
+            ele: p1.ele + (p2.ele - p1.ele) * ratio,
+            gradient: p1.gradient
+          };
         }
-        logDiagnostic("Demo Mode disabled.");
       }
+      return App.routeData[0];
     }
 
-    function toggleRideState() {
-      if (appState.isRiding) {
-        appState.isRiding = false;
-        document.getElementById('btn-start-ride').textContent = appState.isDemoMode ? "Resume Demo Ride" : "Resume Ride";
-        if (appState.timerInterval) clearInterval(appState.timerInterval);
-        logDiagnostic("Ride paused.");
-      } else {
-        appState.isRiding = true;
-        document.getElementById('btn-start-ride').textContent = "Pause Ride";
-        if (appState.timerInterval) clearInterval(appState.timerInterval);
-        appState.timerInterval = setInterval(rideTickLoop, 1000);
-        logDiagnostic("Ride started.");
-      }
+    // Setup UI Controls & Listeners
+    function setupEventListeners() {
+      // Connect Smart Trainer
+      document.getElementById('btn-connect-trainer').addEventListener('click', connectSmartTrainer);
+      
+      // Connect Heart Rate
+      document.getElementById('btn-connect-hr').addEventListener('click', connectHeartRate);
+
+      // Watt Slider for ERG Target
+      const slider = document.getElementById('watt-slider');
+      slider.addEventListener('input', (e) => {
+        App.targetWatts = parseInt(e.target.value);
+        document.getElementById('watt-target-disp').innerText = `${App.targetWatts} W`;
+        sendTargetWattsBLE(App.targetWatts);
+      });
+
+      // Simulation Mode Toggle
+      document.getElementById('btn-demo-mode').addEventListener('click', toggleDemoMode);
+
+      // Log Drawer Toggle
+      document.getElementById('btn-toggle-logs').addEventListener('click', () => {
+        const drawer = document.getElementById('diagnostic-drawer');
+        drawer.style.display = drawer.style.display === 'block' ? 'none' : 'block';
+      });
+
+      // Window Resize Listener for Canvas Responsive Redraw
+      window.addEventListener('resize', () => {
+        if (App.map) App.map.invalidateSize();
+        drawElevationProfile();
+      });
     }
 
-    function rideTickLoop() {
-      if (!appState.isRiding) return;
-
-      appState.elapsedSeconds++;
-
-      const hrs = String(Math.floor(appState.elapsedSeconds / 3600)).padStart(2, '0');
-      const mins = String(Math.floor((appState.elapsedSeconds % 3600) / 60)).padStart(2, '0');
-      const secs = String(appState.elapsedSeconds % 60).padStart(2, '0');
-      document.getElementById('header-timer').textContent = `${hrs}:${mins}:${secs}`;
-
-      if (appState.isDemoMode) {
-        const targetW = appState.controlMode === 'ERG' ? appState.targetWatts : 210;
-        appState.power = Math.round(targetW + (Math.random() * 14 - 7));
-        appState.cadence = Math.round(88 + (Math.random() * 6 - 3));
-        appState.speed = Math.max(12, 28 + (Math.random() * 4 - 2) - (appState.currentGradient * 1.2));
-        appState.heartRate = Math.min(185, Math.round(135 + (appState.power * 0.15)));
-        
-        updateTelemetryUI();
-        updateHRUI(appState.heartRate);
-      }
-
-      if (appState.routeData.length > 0) {
-        let currentSpeedKmh = appState.speed;
-        if (currentSpeedKmh <= 0 && appState.power > 0) {
-          currentSpeedKmh = Math.pow(appState.power / 3.0, 1/3) * 3.6;
-        }
-
-        const distanceTraveledThisSecondKm = (currentSpeedKmh / 3600);
-        appState.distanceKm += distanceTraveledThisSecondKm;
-        document.getElementById('header-distance').textContent = `${appState.distanceKm.toFixed(2)} km`;
-
-        let route = appState.routeData;
-        while (appState.currentRouteIndex < route.length - 1 &&
-               route[appState.currentRouteIndex].distFromStart < appState.distanceKm) {
-          appState.currentRouteIndex++;
-        }
-
-        const currentPt = route[appState.currentRouteIndex];
-        if (currentPt) {
-          appState.currentGradient = currentPt.gradient || 0;
-          document.getElementById('header-gradient').textContent = `${appState.currentGradient.toFixed(1)}%`;
-          document.getElementById('hud-gradient-live').textContent = `${appState.currentGradient.toFixed(1)}%`;
-          document.getElementById('hud-elev-gain').textContent = `${Math.round(currentPt.ele)} m`;
-
-          if (appState.controlMode === 'SIM' && appState.trainerControlChar) {
-            sendSimModeGradient(appState.currentGradient);
-          }
-
-          updateRiderMapPosition();
-          drawElevationChart();
-        }
-      }
-    }
-
-    /* ==========================================================================
-       8. WEB BLUETOOTH INTEGRATION (FTMS & HR)
-       ========================================================================== */
-    async function toggleTrainerConnection() {
-      if (appState.trainerDevice && appState.trainerDevice.gatt.connected) {
-        appState.trainerDevice.gatt.disconnect();
-        onTrainerDisconnected();
-        return;
-      }
-
+    // BLE: Connect Smart Trainer (FTMS 0x1826)
+    async function connectSmartTrainer() {
       if (!navigator.bluetooth) {
-        alert("Web Bluetooth API is not supported in this browser. Please use Chrome, Edge, or Bluefy on iOS.");
-        logDiagnostic("BLE Error: Web Bluetooth API unavailable.", true);
+        alert('Web Bluetooth API is unavailable. On iOS, please run this app inside Bluefy or WebBLE.');
         return;
       }
 
       try {
-        logDiagnostic("Requesting Smart Trainer...");
-        const device = await navigator.bluetooth.requestDevice({
-          filters: [{ services: [UUID_FTMS_SERVICE] }],
-          optionalServices: [UUID_FTMS_SERVICE, UUID_TACX_FEC_SERVICE]
+        log('Requesting Bluetooth FTMS Smart Trainer...', 'info');
+        App.trainerDevice = await navigator.bluetooth.requestDevice({
+          filters: [
+            { services: [App.UUID.FTMS_SERVICE] },
+            { namePrefix: 'Tacx' },
+            { namePrefix: 'Wahoo' },
+            { namePrefix: 'KICKR' }
+          ],
+          optionalServices: [App.UUID.FTMS_SERVICE]
         });
 
-        device.addEventListener('gattserverdisconnected', onTrainerDisconnected);
-        appState.trainerDevice = device;
+        log(`Connecting to GATT Server: ${App.trainerDevice.name}...`, 'info');
+        const server = await App.trainerDevice.gatt.connect();
 
-        const server = await device.gatt.connect();
-        const service = await server.getPrimaryService(UUID_FTMS_SERVICE);
+        log('Discovering FTMS Service...', 'info');
+        const service = await server.getPrimaryService(App.UUID.FTMS_SERVICE);
 
-        const bikeDataChar = await service.getCharacteristic(UUID_INDOOR_BIKE_DATA);
+        // Subscribe to Indoor Bike Data (0x2AD2)
+        const bikeDataChar = await service.getCharacteristic(App.UUID.INDOOR_BIKE_DATA);
         await bikeDataChar.startNotifications();
         bikeDataChar.addEventListener('characteristicvaluechanged', handleIndoorBikeData);
 
-        try {
-          appState.trainerControlChar = await service.getCharacteristic(UUID_FITNESS_MACHINE_CONTROL);
-          const requestControl = new Uint8Array([0x00]);
-          await appState.trainerControlChar.writeValue(requestControl);
-          logDiagnostic("FTMS Control Granted.");
-        } catch (ctrlErr) {
-          logDiagnostic(`Control Warning: ${ctrlErr.message}`, true);
-        }
+        // Get Control Point Characteristic (0x2AD9)
+        App.ftmsControlPoint = await service.getCharacteristic(App.UUID.FITNESS_CONTROL_POINT);
 
-        onTrainerConnected(device.name);
+        log('Successfully connected to Smart Trainer!', 'success');
+
+        // Transition CTA state
+        const connBtn = document.getElementById('btn-connect-trainer');
+        const connLbl = document.getElementById('lbl-connect-trainer');
+        connBtn.classList.remove('primary');
+        connBtn.style.background = 'var(--accent-green)';
+        connBtn.style.color = '#fff';
+        connLbl.innerText = 'Start Ride (Connected)';
+
       } catch (err) {
-        logDiagnostic(`Trainer Connection Failed: ${err.message}`, true);
-        onTrainerDisconnected();
+        log(`BLE Trainer Error: ${err.message}`, 'err');
       }
     }
 
-    function onTrainerConnected(deviceName) {
-      logDiagnostic(`Trainer Connected: ${deviceName}`);
-      const btn = document.getElementById('btn-connect-trainer');
-      btn.className = "px-3 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40";
-      document.getElementById('trainer-status-text').textContent = "Trainer Connected";
-      
-      const startBtn = document.getElementById('btn-start-ride');
-      startBtn.disabled = false;
-      startBtn.className = "px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition bg-zwift-orange text-white hover:bg-orange-600 shadow-lg shadow-zwift-orange/30 animate-pulse";
-      startBtn.textContent = appState.isRiding ? "Pause Ride" : "Start Ride";
-    }
-
-    function onTrainerDisconnected() {
-      logDiagnostic("Trainer Disconnected.");
-      appState.trainerDevice = null;
-      appState.trainerControlChar = null;
-
-      const btn = document.getElementById('btn-connect-trainer');
-      btn.className = "px-3 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 text-zwift-blue border border-zwift-blue/30";
-      document.getElementById('trainer-status-text').textContent = "Connect Trainer";
-
-      if (!appState.isDemoMode) {
-        const startBtn = document.getElementById('btn-start-ride');
-        startBtn.disabled = true;
-        startBtn.className = "px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700";
-        startBtn.textContent = "Waiting for Bluetooth devices...";
-      }
-    }
-
-    async function toggleHRConnection() {
-      if (appState.hrDevice && appState.hrDevice.gatt.connected) {
-        appState.hrDevice.gatt.disconnect();
-        onHRDisconnected();
-        return;
-      }
-
-      try {
-        logDiagnostic("Requesting HR Monitor...");
-        const device = await navigator.bluetooth.requestDevice({
-          filters: [{ services: [UUID_HR_SERVICE] }]
-        });
-
-        device.addEventListener('gattserverdisconnected', onHRDisconnected);
-        appState.hrDevice = device;
-
-        const server = await device.gatt.connect();
-        const service = await server.getPrimaryService(UUID_HR_SERVICE);
-        const hrChar = await service.getCharacteristic(UUID_HR_MEASUREMENT);
-
-        await hrChar.startNotifications();
-        hrChar.addEventListener('characteristicvaluechanged', handleHRData);
-
-        logDiagnostic(`HR Monitor Connected: ${device.name}`);
-        const btn = document.getElementById('btn-connect-hr');
-        btn.className = "px-3 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40";
-        document.getElementById('hr-status-text').textContent = "HR Connected";
-      } catch (err) {
-        logDiagnostic(`HR Connection Failed: ${err.message}`, true);
-      }
-    }
-
-    function onHRDisconnected() {
-      logDiagnostic("HR Monitor Disconnected.");
-      appState.hrDevice = null;
-      const btn = document.getElementById('btn-connect-hr');
-      btn.className = "px-3 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 text-rose-400 border border-rose-500/30";
-      document.getElementById('hr-status-text').textContent = "Connect HR";
-      document.getElementById('hud-hr').textContent = "--";
-    }
-
+    // Parse FTMS Indoor Bike Data Characteristic Byte Array
     function handleIndoorBikeData(event) {
-      if (appState.isDemoMode) return;
       const data = event.target.value;
-      let flags = data.getUint16(0, true);
+      const flags = data.getUint16(0, true);
+
       let offset = 2;
 
-      if (!(flags & 0x01)) { appState.speed = data.getUint16(offset, true) / 100.0; offset += 2; }
-      if (flags & 0x04) { appState.cadence = Math.round(data.getUint16(offset, true) * 0.5); offset += 2; }
-      if (flags & 0x40) { appState.power = data.getInt16(offset, true); offset += 2; }
+      // Speed (0.01 km/h)
+      if (!(flags & 0x0001)) { // Instantaneous Speed present
+        const rawSpeed = data.getUint16(offset, true);
+        App.currentSpeed = rawSpeed * 0.01;
+        offset += 2;
+      }
+
+      // Cadence (0.5 RPM)
+      if (flags & 0x0002) {
+        const rawCadence = data.getUint16(offset, true);
+        App.currentCadence = rawCadence * 0.5;
+        offset += 2;
+      }
+
+      // Power (Watts)
+      if (flags & 0x0040) {
+        App.currentPower = data.getInt16(offset, true);
+        offset += 2;
+      }
 
       updateTelemetryUI();
+      advanceRiderPosition();
     }
 
-    function handleHRData(event) {
-      if (appState.isDemoMode) return;
-      const data = event.target.value;
-      const flags = data.getUint8(0);
-      appState.heartRate = (flags & 0x01) ? data.getUint16(1, true) : data.getUint8(1);
-      updateHRUI(appState.heartRate);
-    }
-
-    async function sendTargetPower(targetWatts) {
-      if (!appState.trainerControlChar) return;
+    // Send Target Watts (ERG Mode Command 0x05) to Smart Trainer
+    async function sendTargetWattsBLE(watts) {
+      if (!App.ftmsControlPoint) return;
       try {
         const buffer = new ArrayBuffer(3);
         const view = new DataView(buffer);
-        view.setUint8(0, 0x05);
-        view.setInt16(1, Math.round(targetWatts), true);
-        await appState.trainerControlChar.writeValue(buffer);
-        logDiagnostic(`Target Power set to ${targetWatts}W`);
+        view.setUint8(0, 0x05); // Set Target Power OpCode
+        view.setInt16(1, watts, true); // Watts in Int16 Little-Endian
+        await App.ftmsControlPoint.writeValue(buffer);
+        log(`Sent ERG Target Power: ${watts}W to trainer.`, 'info');
       } catch (err) {
-        logDiagnostic(`ERG Error: ${err.message}`, true);
+        log(`Failed to write Target Watts: ${err.message}`, 'err');
       }
     }
 
-    async function sendSimModeGradient(gradientPercent) {
-      if (!appState.trainerControlChar) return;
+    // BLE: Connect Heart Rate Monitor (0x180D)
+    async function connectHeartRate() {
+      if (!navigator.bluetooth) return;
+
       try {
-        const buffer = new ArrayBuffer(7);
-        const view = new DataView(buffer);
-        view.setUint8(0, 0x11);
-        view.setInt16(1, 0, true);
-        view.setInt16(3, Math.round(gradientPercent * 100), true);
-        view.setUint8(5, 33);
-        view.setUint8(6, 51);
-        await appState.trainerControlChar.writeValue(buffer);
-      } catch (err) {}
-    }
+        log('Searching for Heart Rate Monitor...', 'info');
+        App.hrDevice = await navigator.bluetooth.requestDevice({
+          filters: [{ services: [App.UUID.HR_SERVICE] }]
+        });
 
-    /* ==========================================================================
-       9. CONTROLS & HUD SYNC
-       ========================================================================== */
-    function setControlMode(mode) {
-      appState.controlMode = mode;
-      const btnSim = document.getElementById('btn-mode-sim');
-      const btnErg = document.getElementById('btn-mode-erg');
-      const ergControls = document.getElementById('erg-controls');
+        const server = await App.hrDevice.gatt.connect();
+        const service = await server.getPrimaryService(App.UUID.HR_SERVICE);
+        const hrChar = await service.getCharacteristic(App.UUID.HR_MEASUREMENT);
 
-      if (mode === 'SIM') {
-        btnSim.className = "py-2 rounded-lg text-xs font-extrabold uppercase transition bg-zwift-orange text-white shadow";
-        btnErg.className = "py-2 rounded-lg text-xs font-extrabold uppercase transition text-slate-400 hover:text-white";
-        ergControls.classList.add('opacity-50', 'pointer-events-none');
-        document.getElementById('current-mode-display').textContent = "SIM MODE";
-        document.getElementById('power-target-label').textContent = "Target: ROUTE";
-      } else {
-        btnErg.className = "py-2 rounded-lg text-xs font-extrabold uppercase transition bg-zwift-orange text-white shadow";
-        btnSim.className = "py-2 rounded-lg text-xs font-extrabold uppercase transition text-slate-400 hover:text-white";
-        ergControls.classList.remove('opacity-50', 'pointer-events-none');
-        document.getElementById('current-mode-display').textContent = "ERG MODE";
-        updateERGTarget(appState.targetWatts);
+        await hrChar.startNotifications();
+        hrChar.addEventListener('characteristicvaluechanged', (e) => {
+          const data = e.target.value;
+          const flags = data.getUint8(0);
+          App.currentHR = (flags & 0x01) ? data.getUint16(1, true) : data.getUint8(1);
+          document.getElementById('val-hr').innerText = App.currentHR;
+        });
+
+        log('Heart Rate Monitor Connected!', 'success');
+        document.getElementById('btn-connect-hr').style.borderColor = 'var(--accent-red)';
+
+      } catch (err) {
+        log(`HR BLE Error: ${err.message}`, 'err');
       }
     }
 
-    function updateERGTarget(val) {
-      appState.targetWatts = parseInt(val);
-      document.getElementById('erg-watt-val').textContent = `${appState.targetWatts} W`;
-      document.getElementById('power-target-label').textContent = `Target: ${appState.targetWatts} W`;
-      if (appState.controlMode === 'ERG') sendTargetPower(appState.targetWatts);
+    // Simulation / Demo Mode for Testing without Physical Trainer
+    function toggleDemoMode() {
+      App.isSimulating = !App.isSimulating;
+      const btn = document.getElementById('btn-demo-mode');
+
+      if (App.isSimulating) {
+        btn.style.background = 'var(--accent-orange)';
+        btn.style.color = '#fff';
+        btn.innerHTML = '<i class="fa-solid fa-pause"></i> Pause Demo Ride';
+        log('Starting Simulation Demo Mode...', 'info');
+
+        App.simInterval = setInterval(() => {
+          // Simulate realistic riding physics
+          App.currentPower = App.targetWatts + Math.floor(Math.sin(Date.now() / 1000) * 15);
+          App.currentCadence = 85 + Math.floor(Math.sin(Date.now() / 1500) * 5);
+          App.currentHR = 135 + Math.floor(Math.sin(Date.now() / 2000) * 10);
+
+          // Speed derived from power & gradient formula approximation
+          const curPt = getInterpolatedPoint(App.currentDist);
+          App.currentGradient = curPt.gradient || 0;
+          const speedFactor = Math.max(12, 32 - App.currentGradient * 1.8);
+          App.currentSpeed = (App.currentPower / 180) * speedFactor;
+
+          // Increment distance based on speed
+          const distIncrementKm = (App.currentSpeed / 3600); // per second
+          App.currentDist += distIncrementKm;
+          if (App.currentDist > App.totalDistance) App.currentDist = 0; // Loop route
+
+          updateTelemetryUI();
+          advanceRiderPosition();
+        }, 1000);
+
+      } else {
+        btn.style.background = 'var(--panel-bg)';
+        btn.style.color = 'var(--text-main)';
+        btn.innerHTML = '<i class="fa-solid fa-play"></i> Toggle Demo / Simulation';
+        clearInterval(App.simInterval);
+        log('Simulation paused.', 'warn');
+      }
     }
 
+    // Advance Map Marker & Elevation Graph Frame
+    function advanceRiderPosition() {
+      const pt = getInterpolatedPoint(App.currentDist);
+      
+      if (App.riderMarker && pt) {
+        App.riderMarker.setLatLng([pt.lat, pt.lng]);
+        App.map.panTo([pt.lat, pt.lng], { animate: true, duration: 0.5 });
+      }
+
+      App.currentGradient = pt.gradient || 0;
+      document.getElementById('val-gradient').innerText = App.currentGradient.toFixed(1);
+
+      drawElevationProfile();
+    }
+
+    // Update Telemetry Display HUD Cards
     function updateTelemetryUI() {
-      document.getElementById('hud-power').textContent = appState.power;
-      appState.powerHistory.push(appState.power);
-      if (appState.powerHistory.length > 3) appState.powerHistory.shift();
-      document.getElementById('hud-power-3s').textContent = `${Math.round(appState.powerHistory.reduce((a, b) => a + b, 0) / appState.powerHistory.length)} W`;
-
-      if (appState.power > appState.maxPower) {
-        appState.maxPower = appState.power;
-        document.getElementById('hud-power-max').textContent = `${appState.maxPower} W`;
-      }
-
-      document.getElementById('hud-cadence').textContent = appState.cadence;
-      if (appState.cadence > 0) appState.cadenceHistory.push(appState.cadence);
-      document.getElementById('hud-cadence-avg').textContent = appState.cadenceHistory.length ? 
-        Math.round(appState.cadenceHistory.reduce((a, b) => a + b, 0) / appState.cadenceHistory.length) : 0;
-
-      document.getElementById('hud-speed').textContent = appState.speed.toFixed(1);
-      if (appState.speed > 0) appState.speedHistory.push(appState.speed);
-      document.getElementById('hud-speed-avg').textContent = appState.speedHistory.length ? 
-        (appState.speedHistory.reduce((a, b) => a + b, 0) / appState.speedHistory.length).toFixed(1) : "0.0";
-    }
-
-    function updateHRUI(hr) {
-      document.getElementById('hud-hr').textContent = hr;
-      document.getElementById('hr-bar').style.width = `${Math.min((hr / 190) * 100, 100)}%`;
-      const zoneTag = document.getElementById('hr-zone-tag');
-
-      if (hr < 120) {
-        zoneTag.textContent = "Z1 - Warmup";
-        zoneTag.className = "text-[10px] px-2 py-0.5 rounded font-bold bg-slate-800 text-slate-300";
-      } else if (hr < 140) {
-        zoneTag.textContent = "Z2 - Endurance";
-        zoneTag.className = "text-[10px] px-2 py-0.5 rounded font-bold bg-emerald-950 text-emerald-400 border border-emerald-500/30";
-      } else if (hr < 160) {
-        zoneTag.textContent = "Z3 - Tempo";
-        zoneTag.className = "text-[10px] px-2 py-0.5 rounded font-bold bg-amber-950 text-amber-400 border border-amber-500/30";
-      } else if (hr < 175) {
-        zoneTag.textContent = "Z4 - Threshold";
-        zoneTag.className = "text-[10px] px-2 py-0.5 rounded font-bold bg-orange-950 text-orange-400 border border-orange-500/30";
-      } else {
-        zoneTag.textContent = "Z5 - Anaerobic";
-        zoneTag.className = "text-[10px] px-2 py-0.5 rounded font-bold bg-rose-950 text-rose-400 border border-rose-500/30 animate-pulse";
-      }
+      document.getElementById('val-power').innerText = Math.round(App.currentPower);
+      document.getElementById('val-cadence').innerText = Math.round(App.currentCadence);
+      document.getElementById('val-speed').innerText = App.currentSpeed.toFixed(1);
+      document.getElementById('val-distance').innerText = App.currentDist.toFixed(2);
     }
   </script>
 </body>
