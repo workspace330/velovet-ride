@@ -1,1150 +1,204 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full bg-slate-950 text-slate-100">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Velovet Ride - Indoor Cycling App</title>
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Leaflet CSS & JS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    <!-- FontAwesome Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
-    
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        zwift: {
-                            orange: '#FF5500',
-                            blue: '#00A8FF',
-                            neonGreen: '#00FF66',
-                            darkBg: '#0F172A',
-                            cardBg: 'rgba(15, 23, 42, 0.85)'
-                        }
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'system-ui', 'sans-serif']
-                    }
-                }
-            }
-        }
-    </script>
-    <style>
-        /* Custom Styles & Glassmorphism Effects */
-        .glass-panel {
-            background: rgba(15, 23, 42, 0.82);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        .hud-value {
-            text-shadow: 0 0 12px rgba(0, 168, 255, 0.4);
-        }
-        .hud-orange-value {
-            text-shadow: 0 0 12px rgba(255, 85, 0, 0.4);
-        }
-        /* Leaflet Dark Filter Overrides */
-        .leaflet-tile {
-            filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
-        }
-        .leaflet-container {
-            background: #020617 !important;
-        }
-        /* Custom Scrollbars */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: rgba(15, 23, 42, 0.6);
-        }
-        ::-webkit-scrollbar-thumb {
-            background: rgba(255, 85, 0, 0.5);
-            border-radius: 3px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: rgba(255, 85, 0, 0.8);
-        }
-        /* Pulse Animation */
-        @keyframes pulse-fast {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.4; }
-        }
-        .animate-pulse-fast {
-            animation: pulse-fast 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-        }
-    </style>
-</head>
-<body class="h-full flex flex-col font-sans overflow-hidden bg-slate-950 text-slate-100 select-none">
-
-    <!-- Persistent iOS Bluefy Notice Banner -->
-    <div id="ios-notice" class="bg-amber-600/90 text-amber-950 px-4 py-2 text-xs md:text-sm font-semibold flex items-center justify-between border-b border-amber-500/30 z-50">
-        <div class="flex items-center gap-2 max-w-5xl mx-auto w-full">
-            <i class="fa-solid fa-triangle-exclamation text-amber-950 text-base flex-shrink-0"></i>
-            <span><strong>Notice:</strong> On iOS devices, the <strong>Bluefy Web BLE Browser</strong> or <strong>WebBLE</strong> app is required for Web Bluetooth support due to Safari restrictions.</span>
-        </div>
-        <button onclick="document.getElementById('ios-notice').style.display='none'" class="text-amber-950 hover:text-black p-1">
-            <i class="fa-solid fa-xmark"></i>
-        </button>
-    </div>
-
-    <!-- Main Navigation Header -->
-    <header class="bg-slate-900/90 border-b border-slate-800 px-4 py-3 flex items-center justify-between z-30 flex-shrink-0">
-        <div class="flex items-center gap-3">
-            <div class="bg-gradient-to-r from-zwift-orange to-amber-500 p-2 rounded-xl text-slate-950 font-black text-xl tracking-tighter flex items-center justify-center w-10 h-10 shadow-lg shadow-zwift-orange/20">
-                VR
-            </div>
-            <div>
-                <h1 class="font-extrabold text-lg leading-none tracking-wide text-white flex items-center gap-2">
-                    VELOVET RIDE <span class="text-xs px-2 py-0.5 rounded bg-zwift-orange/20 text-zwift-orange font-mono border border-zwift-orange/30">CLUB v2.5</span>
-                </h1>
-                <p class="text-xs text-slate-400">Indoor Cycling Smart Trainer Suite</p>
-            </div>
-        </div>
-
-        <!-- Connection Controls Header Actions -->
-        <div class="flex items-center gap-2">
-            <!-- BLE Device Status Badges -->
-            <div class="hidden md:flex items-center gap-2 text-xs font-mono mr-2">
-                <span id="trainer-status" class="px-2.5 py-1 rounded-full bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1.5">
-                    <span class="w-2 h-2 rounded-full bg-slate-500"></span> Trainer: Disconnected
-                </span>
-                <span id="hr-status" class="px-2.5 py-1 rounded-full bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1.5">
-                    <span class="w-2 h-2 rounded-full bg-slate-500"></span> HR: Disconnected
-                </span>
-            </div>
-
-            <button id="btn-ble-connect" onclick="connectBluetooth()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 rounded-lg text-xs md:text-sm font-semibold border border-slate-700 flex items-center gap-2 transition">
-                <i class="fa-bluetooth-b text-zwift-blue text-sm"></i>
-                <span>Connect Hardware</span>
-            </button>
-
-            <button id="btn-toggle-sim" onclick="toggleSimMode()" class="bg-slate-800 hover:bg-slate-700 text-amber-400 px-3 py-2 rounded-lg text-xs md:text-sm font-semibold border border-amber-500/30 flex items-center gap-2 transition">
-                <i class="fa-solid fa-gamepad"></i>
-                <span id="sim-btn-text">Demo Sim</span>
-            </button>
-
-            <button onclick="toggleLogDrawer()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 p-2.5 rounded-lg text-xs border border-slate-700 relative" title="Diagnostics Console">
-                <i class="fa-solid fa-terminal"></i>
-                <span id="log-unread" class="hidden absolute -top-1 -right-1 w-2.5 h-2.5 bg-zwift-orange rounded-full"></span>
-            </button>
-        </div>
-    </header>
-
-    <!-- Main Content Container -->
-    <div class="flex-1 relative flex flex-col md:flex-row overflow-hidden">
-        
-        <!-- Left Side HUD Overlay & Map (Main Viewport) -->
-        <div class="relative flex-1 flex flex-col h-full overflow-hidden">
-
-            <!-- Dynamic CTA Bar (Overlay top) -->
-            <div class="absolute top-4 left-1/2 -translate-x-1/2 z-20 w-11/12 max-w-md">
-                <button id="cta-main-btn" onclick="handleCtaClick()" disabled class="w-full py-3.5 px-6 rounded-2xl font-black text-sm md:text-base tracking-wider uppercase transition shadow-2xl flex items-center justify-center gap-3 bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed">
-                    <i id="cta-icon" class="fa-solid fa-circle-notch fa-spin text-lg"></i>
-                    <span id="cta-text">Waiting for Bluetooth devices...</span>
-                </button>
-            </div>
-
-            <!-- Zwift HUD Metrics Bar Overlay -->
-            <div class="absolute top-20 inset-x-3 md:inset-x-6 z-20 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 md:gap-3 pointer-events-none">
-                
-                <!-- Power Card -->
-                <div class="glass-panel p-2.5 md:p-3 rounded-2xl border-l-4 border-l-zwift-orange pointer-events-auto flex flex-col justify-between">
-                    <div class="flex justify-between items-center text-slate-400 text-xs font-bold uppercase tracking-wider">
-                        <span>POWER</span>
-                        <i class="fa-solid fa-bolt text-zwift-orange"></i>
-                    </div>
-                    <div class="mt-1 flex items-baseline justify-between">
-                        <span id="hud-power" class="text-3xl md:text-4xl font-black font-mono text-white hud-orange-value">0</span>
-                        <span class="text-xs font-semibold text-slate-400">WATTS</span>
-                    </div>
-                </div>
-
-                <!-- Cadence Card -->
-                <div class="glass-panel p-2.5 md:p-3 rounded-2xl border-l-4 border-l-zwift-blue pointer-events-auto flex flex-col justify-between">
-                    <div class="flex justify-between items-center text-slate-400 text-xs font-bold uppercase tracking-wider">
-                        <span>CADENCE</span>
-                        <i class="fa-solid fa-rotate-right text-zwift-blue"></i>
-                    </div>
-                    <div class="mt-1 flex items-baseline justify-between">
-                        <span id="hud-cadence" class="text-3xl md:text-4xl font-black font-mono text-white hud-value">0</span>
-                        <span class="text-xs font-semibold text-slate-400">RPM</span>
-                    </div>
-                </div>
-
-                <!-- Speed Card -->
-                <div class="glass-panel p-2.5 md:p-3 rounded-2xl border-l-4 border-l-emerald-400 pointer-events-auto flex flex-col justify-between">
-                    <div class="flex justify-between items-center text-slate-400 text-xs font-bold uppercase tracking-wider">
-                        <span>SPEED</span>
-                        <i class="fa-solid fa-gauge-high text-emerald-400"></i>
-                    </div>
-                    <div class="mt-1 flex items-baseline justify-between">
-                        <span id="hud-speed" class="text-3xl md:text-4xl font-black font-mono text-white">0.0</span>
-                        <span class="text-xs font-semibold text-slate-400">KM/H</span>
-                    </div>
-                </div>
-
-                <!-- Heart Rate Card -->
-                <div class="glass-panel p-2.5 md:p-3 rounded-2xl border-l-4 border-l-rose-500 pointer-events-auto flex flex-col justify-between">
-                    <div class="flex justify-between items-center text-slate-400 text-xs font-bold uppercase tracking-wider">
-                        <span>HEART RATE</span>
-                        <i id="hr-icon" class="fa-solid fa-heart text-rose-500"></i>
-                    </div>
-                    <div class="mt-1 flex items-baseline justify-between">
-                        <span id="hud-hr" class="text-3xl md:text-4xl font-black font-mono text-white">--</span>
-                        <span class="text-xs font-semibold text-slate-400">BPM</span>
-                    </div>
-                </div>
-
-                <!-- Distance Card -->
-                <div class="glass-panel p-2.5 md:p-3 rounded-2xl border-l-4 border-l-purple-500 pointer-events-auto flex flex-col justify-between">
-                    <div class="flex justify-between items-center text-slate-400 text-xs font-bold uppercase tracking-wider">
-                        <span>DISTANCE</span>
-                        <i class="fa-solid fa-route text-purple-400"></i>
-                    </div>
-                    <div class="mt-1 flex items-baseline justify-between">
-                        <span id="hud-distance" class="text-3xl md:text-4xl font-black font-mono text-white">0.00</span>
-                        <span class="text-xs font-semibold text-slate-400">KM</span>
-                    </div>
-                </div>
-
-                <!-- Gradient Card -->
-                <div class="glass-panel p-2.5 md:p-3 rounded-2xl border-l-4 border-l-yellow-400 pointer-events-auto flex flex-col justify-between">
-                    <div class="flex justify-between items-center text-slate-400 text-xs font-bold uppercase tracking-wider">
-                        <span>GRADIENT</span>
-                        <i class="fa-solid fa-mountain text-yellow-400"></i>
-                    </div>
-                    <div class="mt-1 flex items-baseline justify-between">
-                        <span id="hud-gradient" class="text-3xl md:text-4xl font-black font-mono text-white">0.0</span>
-                        <span class="text-xs font-semibold text-slate-400">%</span>
-                    </div>
-                </div>
-
-                <!-- Elapsed Time Card -->
-                <div class="glass-panel p-2.5 md:p-3 rounded-2xl border-l-4 border-l-cyan-400 pointer-events-auto flex flex-col justify-between col-span-2 sm:col-span-1">
-                    <div class="flex justify-between items-center text-slate-400 text-xs font-bold uppercase tracking-wider">
-                        <span>TIME</span>
-                        <i class="fa-solid fa-stopwatch text-cyan-400"></i>
-                    </div>
-                    <div class="mt-1 flex items-baseline justify-between">
-                        <span id="hud-time" class="text-2xl md:text-3xl font-black font-mono text-white">00:00:00</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Interactive Map Box -->
-            <div id="map" class="w-full h-full z-10 bg-slate-950"></div>
-
-            <!-- Elevation Profile Canvas Banner (Bottom Map Overlay) -->
-            <div class="absolute bottom-4 inset-x-3 md:inset-x-6 z-20 glass-panel p-3 rounded-2xl flex flex-col gap-1 border border-slate-700/60 shadow-xl">
-                <div class="flex justify-between items-center text-xs font-bold text-slate-400 px-1">
-                    <span class="flex items-center gap-2"><i class="fa-solid fa-chart-area text-zwift-orange"></i> ROUTE ELEVATION PROFILE</span>
-                    <span id="elevation-info" class="font-mono text-slate-300">Elev: 0m | Target ERG: <span id="target-erg-display" class="text-zwift-orange">150W</span></span>
-                </div>
-                <div class="relative w-full h-20 md:h-24">
-                    <canvas id="elevationCanvas" class="w-full h-full block rounded-lg"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <!-- Right Side Control Panel Drawer / Sidebar -->
-        <div class="w-full md:w-80 lg:w-96 bg-slate-900 border-t md:border-t-0 md:border-l border-slate-800 flex flex-col h-auto md:h-full z-20 flex-shrink-0 overflow-y-auto">
-            
-            <div class="p-4 space-y-6">
-                <!-- Manual Watt Control Slider -->
-                <div class="glass-panel p-4 rounded-2xl border border-slate-700 space-y-3">
-                    <div class="flex justify-between items-center">
-                        <label for="watt-slider" class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                            <i class="fa-solid fa-sliders text-zwift-orange"></i> Manual ERG Power Control
-                        </label>
-                        <span id="watt-slider-val" class="font-mono font-black text-xl text-zwift-orange">150 W</span>
-                    </div>
-                    <input type="range" id="watt-slider" min="50" max="500" step="5" value="150" oninput="updateTargetPower(this.value)" class="w-full accent-zwift-orange h-2.5 bg-slate-800 rounded-lg appearance-none cursor-pointer">
-                    <div class="flex justify-between text-[10px] text-slate-500 font-mono">
-                        <span>50W</span>
-                        <span>250W</span>
-                        <span>500W</span>
-                    </div>
-                </div>
-
-                <!-- Route & GPX Import Section -->
-                <div class="glass-panel p-4 rounded-2xl border border-slate-700 space-y-3">
-                    <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                        <i class="fa-solid fa-map-location-dot text-zwift-blue"></i> Route Selector
-                    </h3>
-                    
-                    <button onclick="loadDefaultPresetRoute()" class="w-full py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200 flex items-center justify-between transition">
-                        <span class="flex items-center gap-2">
-                            <i class="fa-solid fa-mountain-city text-amber-400"></i>
-                            North Van Seymour Loop (30km)
-                        </span>
-                        <span class="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded font-mono">Preset</span>
-                    </button>
-
-                    <div class="relative">
-                        <input type="file" id="gpx-file-input" accept=".gpx" onchange="handleGpxUpload(event)" class="hidden">
-                        <button onclick="document.getElementById('gpx-file-input').click()" class="w-full py-2.5 px-3 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-dashed border-slate-600 text-xs font-semibold text-slate-300 flex items-center justify-center gap-2 transition">
-                            <i class="fa-solid fa-file-arrow-up text-zwift-orange"></i>
-                            Upload Custom GPX Route
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Cycling Club Leaderboard -->
-                <div class="glass-panel p-4 rounded-2xl border border-slate-700 space-y-3">
-                    <div class="flex justify-between items-center">
-                        <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                            <i class="fa-solid fa-trophy text-yellow-400"></i> Club Leaderboard
-                        </h3>
-                        <span class="text-[10px] text-slate-500">Local Club Records</span>
-                    </div>
-
-                    <div class="max-h-48 overflow-y-auto space-y-1.5 pr-1" id="leaderboard-list">
-                        <!-- Dynamic Leaderboard Items Loaded Here -->
-                        <div class="text-center py-4 text-slate-500 text-xs italic">No ride logs recorded yet. Complete a ride to submit!</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-    </div>
-
-    <!-- Diagnostic Console Drawer (Collapsible) -->
-    <div id="log-drawer" class="fixed bottom-0 inset-x-0 bg-slate-950/95 border-t border-slate-800 z-50 transform translate-y-full transition-transform duration-300 max-h-72 flex flex-col shadow-2xl">
-        <div class="px-4 py-2 bg-slate-900 border-b border-slate-800 flex justify-between items-center text-xs font-mono">
-            <span class="text-slate-300 font-bold flex items-center gap-2">
-                <i class="fa-solid fa-terminal text-zwift-orange"></i> Web Bluetooth Diagnostics & Terminal Log
-            </span>
-            <div class="flex items-center gap-2">
-                <button onclick="clearLogs()" class="text-slate-400 hover:text-white px-2 py-0.5 rounded bg-slate-800 border border-slate-700">Clear</button>
-                <button onclick="toggleLogDrawer()" class="text-slate-400 hover:text-white px-2 py-0.5 rounded bg-slate-800 border border-slate-700">Close</button>
-            </div>
-        </div>
-        <div id="log-content" class="p-3 font-mono text-xs overflow-y-auto space-y-1 flex-1 text-slate-300">
-            <!-- Dynamic Console Logs -->
-        </div>
-    </div>
-
-    <!-- Ride Summary Modal -->
-    <div id="ride-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center hidden p-4">
-        <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-5">
-            <div class="text-center space-y-1">
-                <div class="inline-flex p-3 rounded-full bg-zwift-orange/20 text-zwift-orange mb-2">
-                    <i class="fa-solid fa-flag-checkered text-3xl"></i>
-                </div>
-                <h2 class="text-2xl font-black text-white">RIDE COMPLETED!</h2>
-                <p class="text-xs text-slate-400">Great effort! Save your achievements to the club leaderboard.</p>
-            </div>
-
-            <div class="grid grid-cols-2 gap-3 bg-slate-950/60 p-4 rounded-2xl border border-slate-800 font-mono text-center">
-                <div>
-                    <span class="text-[10px] text-slate-500 uppercase block">Time</span>
-                    <span id="modal-time" class="text-lg font-bold text-white">00:00</span>
-                </div>
-                <div>
-                    <span class="text-[10px] text-slate-500 uppercase block">Distance</span>
-                    <span id="modal-dist" class="text-lg font-bold text-white">0.0 km</span>
-                </div>
-                <div>
-                    <span class="text-[10px] text-slate-500 uppercase block">Avg Power</span>
-                    <span id="modal-power" class="text-lg font-bold text-zwift-orange">0 W</span>
-                </div>
-                <div>
-                    <span class="text-[10px] text-slate-500 uppercase block">Avg Heart Rate</span>
-                    <span id="modal-hr" class="text-lg font-bold text-rose-400">-- BPM</span>
-                </div>
-            </div>
-
-            <div class="space-y-2">
-                <label for="rider-name-input" class="text-xs font-bold text-slate-300 uppercase">Rider Name</label>
-                <input type="text" id="rider-name-input" placeholder="e.g. Alex Rivera" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-zwift-orange">
-            </div>
-
-            <div class="flex gap-3">
-                <button onclick="closeModal()" class="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold text-sm">Discard</button>
-                <button onclick="saveRideToLeaderboard()" class="flex-1 py-3 bg-zwift-orange hover:bg-amber-600 text-slate-950 font-black rounded-xl text-sm">Save to Club Leaderboard</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Application Engine Script -->
-    <script>
-        /**
-         * VELOVET RIDE - CORE APPLICATION ENGINE
-         * BLE FTMS & Heart Rate, GPX Engine, Map Sync & Leaderboard Integration
-         */
-
-        // Bluetooth UUID Definitions
-        const BLE_UUIDS = {
-            FTMS_SERVICE: 0x1826,
-            INDOOR_BIKE_DATA: 0x2AD2,
-            FTMS_CONTROL_POINT: 0x2AD9,
-            FTMS_STATUS: 0x2ADA,
-            HR_SERVICE: 0x180D,
-            HR_MEASUREMENT: 0x2A37,
-            TACX_FE_C_SERVICE: '6e40fec1-b5a3-f393-e0a9-e50e24dcca9e' // Tacx legacy override compatibility fallback
-        };
-
-        // Application State
-        const state = {
-            isRideActive: false,
-            simMode: false,
-            simInterval: null,
-            timerInterval: null,
-            elapsedSeconds: 0,
-            
-            // BLE Devices & Characteristics
-            ftmsDevice: null,
-            ftmsControlChar: null,
-            hrDevice: null,
-
-            // Live Metrics
-            power: 0,
-            cadence: 0,
-            speed: 0,
-            hr: 0,
-            distanceKm: 0,
-            currentGradient: 0.0,
-            targetWatts: 150,
-
-            // History collection for averages
-            powerHistory: [],
-            hrHistory: [],
-
-            // GPX Track Data
-            routePoints: [], // [{lat, lon, ele, distKm}]
-            totalRouteDistKm: 0,
-            currentRouteIndex: 0,
-
-            // Leaflet Components
-            map: null,
-            marker: null,
-            polyline: null
-        };
-
-        // DOM Element Caches
-        const elements = {
-            hudPower: document.getElementById('hud-power'),
-            hudCadence: document.getElementById('hud-cadence'),
-            hudSpeed: document.getElementById('hud-speed'),
-            hudHr: document.getElementById('hud-hr'),
-            hudDistance: document.getElementById('hud-distance'),
-            hudGradient: document.getElementById('hud-gradient'),
-            hudTime: document.getElementById('hud-time'),
-            ctaBtn: document.getElementById('cta-main-btn'),
-            ctaText: document.getElementById('cta-text'),
-            ctaIcon: document.getElementById('cta-icon'),
-            trainerStatus: document.getElementById('trainer-status'),
-            hrStatus: document.getElementById('hr-status'),
-            wattSliderVal: document.getElementById('watt-slider-val'),
-            wattSlider: document.getElementById('watt-slider'),
-            targetErgDisplay: document.getElementById('target-erg-display'),
-            elevationInfo: document.getElementById('elevation-info'),
-            elevationCanvas: document.getElementById('elevationCanvas'),
-            simBtnText: document.getElementById('sim-btn-text')
-        };
-
-        // Initial setup on Window Load
-        window.onload = function() {
-            log('Initializing Velovet Ride Engine...', 'INFO');
-            initMap();
-            loadDefaultPresetRoute();
-            loadLeaderboard();
-            checkBluetoothSupport();
-            window.addEventListener('resize', drawElevationProfile);
-        };
-
-        /* ========================================================================
-         * 1. DIAGNOSTICS & LOGGING SYSTEM
-         * ======================================================================== */
-        function log(message, level = 'INFO') {
-            const container = document.getElementById('log-content');
-            const unread = document.getElementById('log-unread');
-            const entry = document.createElement('div');
-            
-            const time = new Date().toLocaleTimeString();
-            let colorClass = 'text-slate-300';
-            if (level === 'ERROR') colorClass = 'text-red-400 font-bold';
-            if (level === 'WARN') colorClass = 'text-amber-400';
-            if (level === 'SUCCESS') colorClass = 'text-emerald-400 font-bold';
-
-            entry.className = `${colorClass} border-b border-slate-900/40 py-0.5`;
-            entry.innerHTML = `<span class="text-slate-600">[${time}]</span> [${level}] ${message}`;
-            
-            container.appendChild(entry);
-            container.scrollTop = container.scrollHeight;
-
-            const drawer = document.getElementById('log-drawer');
-            if (drawer.classList.contains('translate-y-full')) {
-                unread.classList.remove('hidden');
-            }
-        }
-
-        function toggleLogDrawer() {
-            const drawer = document.getElementById('log-drawer');
-            const unread = document.getElementById('log-unread');
-            drawer.classList.toggle('translate-y-full');
-            if (!drawer.classList.contains('translate-y-full')) {
-                unread.classList.add('hidden');
-            }
-        }
-
-        function clearLogs() {
-            document.getElementById('log-content').innerHTML = '';
-        }
-
-        function checkBluetoothSupport() {
-            if (!navigator.bluetooth) {
-                log('Web Bluetooth API is not available in this browser environment.', 'WARN');
-                log('If on iOS, please launch this site inside Bluefy or WebBLE browser.', 'WARN');
-            } else {
-                log('Web Bluetooth supported. Ready for BLE pairing.', 'SUCCESS');
-            }
-        }
-
-        /* ========================================================================
-         * 2. MAP & GPX ENGINE
-         * ======================================================================== */
-        function initMap() {
-            // Leaflet dark theme map setup
-            state.map = L.map('map', {
-                zoomControl: false,
-                attributionControl: false
-            }).setView([49.3200, -123.0000], 12);
-
-            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 19
-            }).addTo(state.map);
-
-            // Custom Rider Marker SVG Icon
-            const riderIcon = L.divIcon({
-                className: 'custom-rider-marker',
-                html: `<div class="w-6 h-6 rounded-full bg-zwift-orange border-2 border-white shadow-lg shadow-zwift-orange/80 flex items-center justify-center text-slate-950 font-black text-[10px] animate-pulse">
-                        <i class="fa-solid fa-person-biking"></i>
-                       </div>`,
-                iconSize: [24, 24],
-                iconAnchor: [12, 12]
-            });
-
-            state.marker = L.marker([49.3200, -123.0000], { icon: riderIcon }).addTo(state.map);
-        }
-
-        function loadDefaultPresetRoute() {
-            log('Loading North Vancouver Seymour Loop preset route...', 'INFO');
-            
-            // Synthetic 30km North Vancouver route generation with realistic profile
-            const startLat = 49.3100;
-            const startLon = -123.0200;
-            const points = [];
-            let currentDistKm = 0;
-            const totalPoints = 300;
-
-            for (let i = 0; i <= totalPoints; i++) {
-                const progress = i / totalPoints;
-                // Circuit shape calculation around Seymour/Marine drive
-                const lat = startLat + Math.sin(progress * Math.PI * 2) * 0.06 + (progress * 0.02);
-                const lon = startLon + Math.cos(progress * Math.PI * 2) * 0.08;
-                
-                // Realistic mountain climb profile reaching ~400m elevation
-                let ele = 20;
-                if (progress > 0.1 && progress < 0.6) {
-                    ele = 20 + Math.sin((progress - 0.1) / 0.5 * Math.PI) * 380;
-                } else if (progress >= 0.6) {
-                    ele = 20 + Math.cos((progress - 0.6) / 0.4 * Math.PI / 2) * 60;
-                }
-
-                if (i > 0) {
-                    const prev = points[i - 1];
-                    const segmentDist = calculateDistanceKm(prev.lat, prev.lon, lat, lon);
-                    currentDistKm += segmentDist;
-                }
-
-                points.push({ lat, lon, ele, distKm: currentDistKm });
-            }
-
-            setRouteData(points);
-        }
-
-        function handleGpxUpload(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            log(`Reading uploaded GPX file: ${file.name}`, 'INFO');
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const xmlDoc = new DOMParser().parseFromString(e.target.result, 'text/xml');
-                    const trkpts = xmlDoc.getElementsByTagName('trkpt');
-                    if (trkpts.length === 0) {
-                        throw new Error('No track points (<trkpt>) found in GPX file.');
-                    }
-
-                    const points = [];
-                    let accumDist = 0;
-
-                    for (let i = 0; i < trkpts.length; i++) {
-                        const pt = trkpts[i];
-                        const lat = parseFloat(pt.getAttribute('lat'));
-                        const lon = parseFloat(pt.getAttribute('lon'));
-                        const eleNode = pt.getElementsByTagName('ele')[0];
-                        const ele = eleNode ? parseFloat(eleNode.textContent) : 0;
-
-                        if (i > 0) {
-                            const prev = points[i - 1];
-                            accumDist += calculateDistanceKm(prev.lat, prev.lon, lat, lon);
-                        }
-
-                        points.push({ lat, lon, ele, distKm: accumDist });
-                    }
-
-                    log(`Parsed ${points.length} track points from GPX. Total dist: ${accumDist.toFixed(2)} km`, 'SUCCESS');
-                    setRouteData(points);
-                } catch (err) {
-                    log(`GPX Parse Error: ${err.message}`, 'ERROR');
-                }
-            };
-            reader.readAsText(file);
-        }
-
-        function setRouteData(points) {
-            state.routePoints = points;
-            state.totalRouteDistKm = points[points.length - 1].distKm;
-            state.currentRouteIndex = 0;
-
-            // Draw polyline on Leaflet
-            const latLons = points.map(p => [p.lat, p.lon]);
-            if (state.polyline) state.map.removeLayer(state.polyline);
-
-            state.polyline = L.polyline(latLons, {
-                color: '#FF5500',
-                weight: 5,
-                opacity: 0.85,
-                lineJoin: 'round'
-            }).addTo(state.map);
-
-            state.map.fitBounds(state.polyline.getBounds(), { padding: [30, 30] });
-            state.marker.setLatLng([points[0].lat, points[0].lon]);
-
-            drawElevationProfile();
-            updateLocationOnRoute(0);
-        }
-
-        function calculateDistanceKm(lat1, lon1, lat2, lon2) {
-            const R = 6371; // Earth radius km
-            const dLat = (lat2 - lat1) * Math.PI / 180;
-            const dLon = (lon2 - lon1) * Math.PI / 180;
-            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                      Math.sin(dLon / 2) * Math.sin(dLon / 2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            return R * c;
-        }
-
-        function updateLocationOnRoute(accumulatedKm) {
-            if (!state.routePoints.length) return;
-
-            // Find current segment index based on distance
-            let idx = state.currentRouteIndex;
-            while (idx < state.routePoints.length - 1 && state.routePoints[idx + 1].distKm <= accumulatedKm) {
-                idx++;
-            }
-            state.currentRouteIndex = idx;
-
-            const pt = state.routePoints[idx];
-            state.marker.setLatLng([pt.lat, pt.lon]);
-
-            // Pan map smoothly if following active ride
-            if (state.isRideActive && idx % 3 === 0) {
-                state.map.panTo([pt.lat, pt.lon], { animate: true });
-            }
-
-            // Calculate current gradient
-            if (idx < state.routePoints.length - 1) {
-                const nextPt = state.routePoints[idx + 1];
-                const deltaDistM = (nextPt.distKm - pt.distKm) * 1000;
-                const deltaEleM = nextPt.ele - pt.ele;
-                if (deltaDistM > 1) {
-                    state.currentGradient = Math.max(-15, Math.min(25, (deltaEleM / deltaDistM) * 100));
-                }
-            } else {
-                state.currentGradient = 0.0;
-            }
-
-            // Update UI HUD gradient
-            elements.hudGradient.textContent = state.currentGradient.toFixed(1);
-
-            // Redraw profile marker line overlay
-            drawElevationProfile();
-
-            // Check completion
-            if (accumulatedKm >= state.totalRouteDistKm && state.isRideActive) {
-                finishRide();
-            }
-        }
-
-        function drawElevationProfile() {
-            const canvas = elements.elevationCanvas;
-            if (!canvas || !state.routePoints.length) return;
-
-            const ctx = canvas.getContext('2d');
-            const dpr = window.devicePixelRatio || 1;
-            
-            // Handle high DPI crisp canvas drawing
-            const rect = canvas.getBoundingClientRect();
-            canvas.width = rect.width * dpr;
-            canvas.height = rect.height * dpr;
-            ctx.scale(dpr, dpr);
-
-            const width = rect.width;
-            const height = rect.height;
-
-            ctx.clearRect(0, 0, width, height);
-
-            const elevations = state.routePoints.map(p => p.ele);
-            const minEle = Math.min(...elevations);
-            const maxEle = Math.max(...elevations, minEle + 50);
-
-            // Path profile fill
-            ctx.beginPath();
-            ctx.moveTo(0, height);
-
-            for (let i = 0; i < state.routePoints.length; i++) {
-                const p = state.routePoints[i];
-                const x = (p.distKm / state.totalRouteDistKm) * width;
-                const normalizedEle = (p.ele - minEle) / (maxEle - minEle || 1);
-                const y = height - (normalizedEle * (height - 15)) - 5;
-                ctx.lineTo(x, y);
-            }
-
-            ctx.lineTo(width, height);
-            ctx.closePath();
-
-            // Gradient Fill
-            const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
-            bgGrad.addColorStop(0, 'rgba(255, 85, 0, 0.4)');
-            bgGrad.addColorStop(1, 'rgba(255, 85, 0, 0.0)');
-            ctx.fillStyle = bgGrad;
-            ctx.fill();
-
-            // Stroke line
-            ctx.lineWidth = 2;
-            ctx.strokeStyle = '#FF5500';
-            ctx.stroke();
-
-            // Render Current Position Line Indicator
-            const currentPt = state.routePoints[state.currentRouteIndex];
-            if (currentPt) {
-                const posX = (currentPt.distKm / state.totalRouteDistKm) * width;
-                
-                ctx.beginPath();
-                ctx.moveTo(posX, 0);
-                ctx.lineTo(posX, height);
-                ctx.strokeStyle = '#00A8FF';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-
-                // Point marker indicator
-                const currentNormEle = (currentPt.ele - minEle) / (maxEle - minEle || 1);
-                const posY = height - (currentNormEle * (height - 15)) - 5;
-
-                ctx.beginPath();
-                ctx.arc(posX, posY, 4, 0, Math.PI * 2);
-                ctx.fillStyle = '#00A8FF';
-                ctx.fill();
-                ctx.strokeStyle = '#FFFFFF';
-                ctx.lineWidth = 1.5;
-                ctx.stroke();
-
-                elements.elevationInfo.innerHTML = `Elev: <strong>${Math.round(currentPt.ele)}m</strong> | Target ERG: <span class="text-zwift-orange">${Math.round(state.targetWatts)}W</span>`;
-            }
-        }
-
-        /* ========================================================================
-         * 3. WEB BLUETOOTH (FTMS 0x1826 & HR 0x180D)
-         * ======================================================================== */
-        async function connectBluetooth() {
-            log('Initiating Web Bluetooth Device Scan...', 'INFO');
-
-            if (!navigator.bluetooth) {
-                alert('Web Bluetooth API is not supported in this browser. Please use Bluefy (iOS) or Chrome (Desktop/Android).');
-                return;
-            }
-
-            try {
-                // Scan FTMS Smart Trainer
-                log('Requesting Bluetooth FTMS Fitness Machine...', 'INFO');
-                state.ftmsDevice = await navigator.bluetooth.requestDevice({
-                    filters: [{ services: [BLE_UUIDS.FTMS_SERVICE] }],
-                    optionalServices: [BLE_UUIDS.HR_SERVICE, BLE_UUIDS.TACX_FE_C_SERVICE]
-                });
-
-                state.ftmsDevice.addEventListener('gattserverdisconnected', onGattDisconnected);
-                const server = await state.ftmsDevice.gatt.connect();
-                log(`Connected to GATT Server on: ${state.ftmsDevice.name}`, 'SUCCESS');
-
-                // Obtain FTMS Service
-                const ftmsService = await server.getPrimaryService(BLE_UUIDS.FTMS_SERVICE);
-                
-                // Subscribe to Indoor Bike Data (0x2AD2)
-                const bikeDataChar = await ftmsService.getCharacteristic(BLE_UUIDS.INDOOR_BIKE_DATA);
-                await bikeDataChar.startNotifications();
-                bikeDataChar.addEventListener('characteristicvaluechanged', handleIndoorBikeData);
-                log('Subscribed to FTMS Indoor Bike Data notifications (0x2AD2).', 'SUCCESS');
-
-                // Get Control Point Characteristic (0x2AD9)
-                try {
-                    state.ftmsControlChar = await ftmsService.getCharacteristic(BLE_UUIDS.FTMS_CONTROL_POINT);
-                    await state.ftmsControlChar.startNotifications();
-                    log('Acquired FTMS Control Point (0x2AD9) for ERG/Sim control.', 'SUCCESS');
-                    
-                    // Request control command
-                    await sendFtmsControlCommand(new Uint8Array([0x00])); // Request Control
-                } catch (cpErr) {
-                    log(`FTMS Control Point warning: ${cpErr.message}`, 'WARN');
-                }
-
-                // Update Trainer UI Status
-                elements.trainerStatus.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span> ${state.ftmsDevice.name || 'Trainer'}`;
-                elements.trainerStatus.classList.replace('text-slate-400', 'text-emerald-400');
-
-                // Optional Heart Rate Service Connect
-                connectHeartRateService(server).catch(e => log(`HR auto-connect skipped: ${e.message}`, 'INFO'));
-
-                // Enable CTA Start Button
-                updateCtaState(true, "Start Ride", "fa-play");
-
-            } catch (err) {
-                log(`Bluetooth Connection Failed: ${err.message}`, 'ERROR');
-            }
-        }
-
-        async function connectHeartRateService(server) {
-            try {
-                const hrService = await server.getPrimaryService(BLE_UUIDS.HR_SERVICE);
-                const hrChar = await hrService.getCharacteristic(BLE_UUIDS.HR_MEASUREMENT);
-                await hrChar.startNotifications();
-                hrChar.addEventListener('characteristicvaluechanged', handleHeartRateData);
-                log('Subscribed to Bluetooth Heart Rate Service (0x180D).', 'SUCCESS');
-
-                elements.hrStatus.innerHTML = `<span class="w-2 h-2 rounded-full bg-rose-500"></span> HR Monitor`;
-                elements.hrStatus.classList.replace('text-slate-400', 'text-rose-400');
-            } catch (err) {
-                log(`Heart Rate Service not available on primary device: ${err.message}`, 'INFO');
-            }
-        }
-
-        function handleIndoorBikeData(event) {
-            const value = event.target.value;
-            // Parse FTMS Indoor Bike Data (0x2AD2) according to Bluetooth Spec
-            const flags = value.getUint16(0, true);
-            
-            let offset = 2;
-
-            // Instantaneous Speed (Flag Bit 0 == 0 means Present)
-            const hasMoreData = (flags & 0x0001) === 0;
-            if (hasMoreData) {
-                const rawSpeed = value.getUint16(offset, true);
-                state.speed = rawSpeed * 0.01; // km/h (resolution 0.01)
-                offset += 2;
-            }
-
-            // Average Speed bit check
-            if (flags & 0x0002) offset += 2;
-
-            // Instantaneous Cadence (Flag Bit 2)
-            if (flags & 0x0004) {
-                const rawCadence = value.getUint16(offset, true);
-                state.cadence = Math.round(rawCadence * 0.5); // resolution 0.5 RPM
-                offset += 2;
-            }
-
-            // Average Cadence bit check
-            if (flags & 0x0008) offset += 2;
-
-            // Total Distance bit check
-            if (flags & 0x0010) offset += 3;
-
-            // Resistance Level bit check
-            if (flags & 0x0020) offset += 2;
-
-            // Instantaneous Power (Flag Bit 6)
-            if (flags & 0x0040) {
-                state.power = value.getInt16(offset, true); // Watts
-                offset += 2;
-            }
-
-            updateHudMetrics();
-        }
-
-        function handleHeartRateData(event) {
-            const value = event.target.value;
-            const flags = value.getUint8(0);
-            const is16Bit = flags & 0x01;
-            
-            if (is16Bit) {
-                state.hr = value.getUint16(1, true);
-            } else {
-                state.hr = value.getUint8(1);
-            }
-
-            elements.hudHr.textContent = state.hr;
-            
-            if (state.isRideActive && state.hr > 0) {
-                state.hrHistory.push(state.hr);
-            }
-        }
-
-        function onGattDisconnected() {
-            log('Bluetooth Device Disconnected!', 'WARN');
-            elements.trainerStatus.innerHTML = `<span class="w-2 h-2 rounded-full bg-slate-500"></span> Disconnected`;
-            elements.trainerStatus.className = "px-2.5 py-1 rounded-full bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1.5";
-            
-            if (!state.simMode && state.isRideActive) {
-                pauseRide();
-            }
-        }
-
-        // Target Power Command Transmission (FTMS 0x05 - Set Target Power)
-        async function sendFtmsControlCommand(buffer) {
-            if (!state.ftmsControlChar) return;
-            try {
-                await state.ftmsControlChar.writeValue(buffer);
-                log(`Sent FTMS Control Packet: [0x${Array.from(buffer).map(b => b.toString(16).padStart(2, '0')).join(', ')}]`, 'INFO');
-            } catch (err) {
-                log(`FTMS Write Error: ${err.message}`, 'ERROR');
-            }
-        }
-
-        function updateTargetPower(watts) {
-            state.targetWatts = parseInt(watts);
-            elements.wattSliderVal.textContent = `${state.targetWatts} W`;
-            
-            // Calculate dynamic target wattage adjustment
-            drawElevationProfile();
-
-            // FTMS Set Target Power OpCode (0x05), 2-byte SInt16 payload in 1W units
-            if (state.ftmsControlChar) {
-                const payload = new ArrayBuffer(3);
-                const view = new DataView(payload);
-                view.setUint8(0, 0x05); // Set Target Power OpCode
-                view.setInt16(1, state.targetWatts, true); // Target watts LE
-                sendFtmsControlCommand(new Uint8Array(payload));
-            }
-        }
-
-        /* ========================================================================
-         * 4. RIDE ENGINE & SIMULATION ENGINE
-         * ======================================================================== */
-        function toggleSimMode() {
-            state.simMode = !state.simMode;
-            if (state.simMode) {
-                log('Demo Simulation Mode Enabled.', 'WARN');
-                elements.simBtnText.textContent = 'Sim Active';
-                updateCtaState(true, "Start Demo Ride", "fa-play");
-            } else {
-                log('Demo Simulation Mode Disabled.', 'INFO');
-                elements.simBtnText.textContent = 'Demo Sim';
-                if (!state.ftmsDevice) {
-                    updateCtaState(false, "Waiting for Bluetooth devices...", "fa-circle-notch");
-                }
-            }
-        }
-
-        function updateCtaState(enabled, text, iconClass) {
-            const btn = elements.ctaBtn;
-            elements.ctaText.textContent = text;
-            elements.ctaIcon.className = `fa-solid ${iconClass} ${!enabled ? 'fa-spin' : ''} text-lg`;
-
-            if (enabled) {
-                btn.disabled = false;
-                btn.className = "w-full py-3.5 px-6 rounded-2xl font-black text-sm md:text-base tracking-wider uppercase transition shadow-2xl flex items-center justify-center gap-3 bg-gradient-to-r from-zwift-orange to-amber-500 hover:brightness-110 text-slate-950 shadow-zwift-orange/25 cursor-pointer";
-            } else {
-                btn.disabled = true;
-                btn.className = "w-full py-3.5 px-6 rounded-2xl font-black text-sm md:text-base tracking-wider uppercase transition shadow-2xl flex items-center justify-center gap-3 bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed";
-            }
-        }
-
-        function handleCtaClick() {
-            if (!state.isRideActive) {
-                startRide();
-            } else {
-                pauseRide();
-            }
-        }
-
-        function startRide() {
-            state.isRideActive = true;
-            log('Ride Started!', 'SUCCESS');
-
-            updateCtaState(true, "Pause Ride", "fa-pause");
-            elements.ctaBtn.className = "w-full py-3.5 px-6 rounded-2xl font-black text-sm md:text-base tracking-wider uppercase transition shadow-2xl flex items-center justify-center gap-3 bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-amber-500/20 cursor-pointer";
-
-            // Main Seconds Timer Loop
-            state.timerInterval = setInterval(() => {
-                state.elapsedSeconds++;
-                elements.hudTime.textContent = formatTime(state.elapsedSeconds);
-
-                // If in simulation mode, synthesize realistic power/cadence physics
-                if (state.simMode) {
-                    simulateTelemetry();
-                }
-
-                // Log power & HR for post-ride avg calculations
-                if (state.power > 0) state.powerHistory.push(state.power);
-
-                // Accumulate distance based on current speed
-                const distIncrement = (state.speed / 3600); // dist per sec in km
-                state.distanceKm += distIncrement;
-                elements.hudDistance.textContent = state.distanceKm.toFixed(2);
-
-                // Update location marker along GPX track
-                updateLocationOnRoute(state.distanceKm);
-
-            }, 1000);
-        }
-
-        function pauseRide() {
-            state.isRideActive = false;
-            clearInterval(state.timerInterval);
-            log('Ride Paused.', 'INFO');
-            updateCtaState(true, "Resume Ride", "fa-play");
-        }
-
-        function simulateTelemetry() {
-            // Target Watts + small jitter
-            const baseWatts = state.targetWatts;
-            const jitter = Math.floor(Math.random() * 11) - 5;
-            state.power = Math.max(0, baseWatts + jitter);
-
-            // Synthesize cadence (85 - 95 RPM range)
-            state.cadence = Math.floor(88 + Math.random() * 8);
-
-            // Estimate speed using simple power-to-speed physics equation: Speed ~ (Power / 3.5)^(1/3) * 12
-            const gradPenalty = 1 + (state.currentGradient * 0.05);
-            const rawSpeed = Math.max(5, (Math.cbrt(state.power) * 8.5) / Math.max(0.5, gradPenalty));
-            state.speed = parseFloat(rawSpeed.toFixed(1));
-
-            // Synthesize heart rate proportional to power output
-            state.hr = Math.min(195, Math.max(70, Math.floor(90 + (state.power * 0.35))));
-            elements.hudHr.textContent = state.hr;
-
-            updateHudMetrics();
-        }
-
-        function updateHudMetrics() {
-            elements.hudPower.textContent = state.power;
-            elements.hudCadence.textContent = state.cadence;
-            elements.hudSpeed.textContent = state.speed.toFixed(1);
-        }
-
-        function formatTime(secs) {
-            const h = Math.floor(secs / 3600).toString().padStart(2, '0');
-            const m = Math.floor((secs % 3600) / 60).toString().padStart(2, '0');
-            const s = (secs % 60).toString().padStart(2, '0');
-            return `${h}:${m}:${s}`;
-        }
-
-        function finishRide() {
-            pauseRide();
-            log('Route Complete! Opening Summary modal.', 'SUCCESS');
-
-            const avgPower = state.powerHistory.length 
-                ? Math.round(state.powerHistory.reduce((a, b) => a + b, 0) / state.powerHistory.length) 
-                : 0;
-            const avgHr = state.hrHistory.length 
-                ? Math.round(state.hrHistory.reduce((a, b) => a + b, 0) / state.hrHistory.length) 
-                : 0;
-
-            document.getElementById('modal-time').textContent = formatTime(state.elapsedSeconds);
-            document.getElementById('modal-dist').textContent = `${state.distanceKm.toFixed(2)} km`;
-            document.getElementById('modal-power').textContent = `${avgPower} W`;
-            document.getElementById('modal-hr').textContent = avgHr ? `${avgHr} BPM` : '--';
-
-            document.getElementById('ride-modal').classList.remove('hidden');
-        }
-
-        function closeModal() {
-            document.getElementById('ride-modal').classList.add('hidden');
-        }
-
-        /* ========================================================================
-         * 5. LEADERBOARD & LOCAL STORAGE
-         * ======================================================================== */
-        function saveRideToLeaderboard() {
-            const riderName = document.getElementById('rider-name-input').value.trim() || 'Anonymous Cyclist';
-            const avgPower = state.powerHistory.length 
-                ? Math.round(state.powerHistory.reduce((a, b) => a + b, 0) / state.powerHistory.length) 
-                : 0;
-            const avgHr = state.hrHistory.length 
-                ? Math.round(state.hrHistory.reduce((a, b) => a + b, 0) / state.hrHistory.length) 
-                : 0;
-
-            const entry = {
-                id: Date.now(),
-                rider: riderName,
-                route: 'North Van Seymour Loop',
-                timeSecs: state.elapsedSeconds,
-                timeFormatted: formatTime(state.elapsedSeconds),
-                distanceKm: state.distanceKm.toFixed(2),
-                avgPower,
-                avgHr,
-                date: new Date().toLocaleDateString()
-            };
-
-            const leaderboard = getLeaderboardData();
-            leaderboard.push(entry);
-            
-            // Sort by fastest time
-            leaderboard.sort((a, b) => a.timeSecs - b.timeSecs);
-
-            localStorage.setItem('velovet_leaderboard', JSON.stringify(leaderboard));
-            log(`Saved entry for rider: ${riderName} to local club leaderboard.`, 'SUCCESS');
-
-            closeModal();
-            loadLeaderboard();
-        }
-
-        function getLeaderboardData() {
-            const data = localStorage.getItem('velovet_leaderboard');
-            return data ? JSON.parse(data) : [];
-        }
-
-        function loadLeaderboard() {
-            const list = document.getElementById('leaderboard-list');
-            const data = getLeaderboardData();
-
-            if (!data.length) {
-                list.innerHTML = `<div class="text-center py-4 text-slate-500 text-xs italic">No ride logs recorded yet. Complete a ride to submit!</div>`;
-                return;
-            }
-
-            list.innerHTML = data.slice(0, 10).map((item, idx) => `
-                <div class="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800 flex items-center justify-between text-xs">
-                    <div class="flex items-center gap-2.5">
-                        <span class="w-5 h-5 rounded-full ${idx === 0 ? 'bg-yellow-500 text-slate-950' : idx === 1 ? 'bg-slate-300 text-slate-950' : idx === 2 ? 'bg-amber-700 text-white' : 'bg-slate-800 text-slate-400'} font-bold text-[10px] flex items-center justify-center">
-                            ${idx + 1}
-                        </span>
-                        <div>
-                            <div class="font-bold text-slate-200">${escapeHtml(item.rider)}</div>
-                            <div class="text-[10px] text-slate-500">${item.date} • ${item.distanceKm}km</div>
-                        </div>
-                    </div>
-                    <div class="text-right font-mono">
-                        <div class="font-bold text-zwift-orange">${item.timeFormatted}</div>
-                        <div class="text-[10px] text-slate-400">${item.avgPower}W | ${item.avgHr ? item.avgHr + 'bpm' : '--'}</div>
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        function escapeHtml(str) {
-            return str.replace(/[&<>"']/g, function(m) {
-                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m];
-            });
-        }
-    </script>
-</body>
-</html>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Velovet Ride - Indoor Cycling App</title>
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+  
+  <style>
+    :root {
+      --bg-dark: #121214;
+      --bg-card: rgba(24, 24, 28, 0.85);
+      --bg-card-solid: #18181c;
+      --accent-orange: #fc5200;
+      --accent-cyan: #00f0ff;
+      --accent-green: #00e676;
+      --accent-red: #ff1744;
+      --text-main: #ffffff;
+      --text-muted: #a0a0ab;
+      --border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top iOS / Bluefy Notice Banner */
+    #ios-notice {
+      background: linear-gradient(90deg, #ff9100, #fc5200);
+      color: #000;
+      font-weight: 600;
+      font-size: 0.85rem;
+      padding: 6px 12px;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      z-index: 1000;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    #ios-notice button {
+      background: rgba(0,0,0,0.2);
+      border: none;
+      color: #000;
+      padding: 2px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.75rem;
+    }
+
+    /* App Header */
+    header {
+      background-color: var(--bg-card-solid);
+      border-bottom: 1px solid var(--border-color);
+      padding: 10px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 500;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand h1 {
+      font-size: 1.25rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(45deg, #fff, var(--accent-orange));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    /* Dynamic Bluetooth Connection Button */
+    .btn-ble {
+      background-color: #3a3a42;
+      color: var(--text-muted);
+      border: 1px solid var(--border-color);
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      cursor: not-allowed;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-ble.ready {
+      background-color: var(--accent-green);
+      color: #000;
+      cursor: pointer;
+      box-shadow: 0 0 12px rgba(0, 230, 118, 0.4);
+    }
+    .btn-ble.riding {
+      background-color: var(--accent-orange);
+      color: #fff;
+      cursor: pointer;
+    }
+
+    /* Main Grid Layout */
+    .app-container {
+      display: grid;
+      grid-template-columns: 320px 1fr 340px;
+      grid-template-rows: 1fr 140px;
+      height: calc(100vh - 50px);
+      position: relative;
+    }
+
+    @media (max-width: 1024px) {
+      .app-container {
+        grid-template-columns: 280px 1fr;
+        grid-template-rows: 1fr 180px auto;
+        overflow-y: auto;
+      }
+      .right-panel {
+        grid-column: span 2;
+      }
+    }
+
+    /* Map Display */
+    #map {
+      grid-column: 2;
+      grid-row: 1;
+      width: 100%;
+      height: 100%;
+      background: #1a1a1a;
+      z-index: 1;
+    }
+
+    /* Left Control Sidebar */
+    .left-panel {
+      grid-column: 1;
+      grid-row: 1 / span 2;
+      background-color: var(--bg-card-solid);
+      border-right: 1px solid var(--border-color);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+      z-index: 10;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 14px;
+      backdrop-filter: blur(10px);
+    }
+
+    .card-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* BLE Connect Buttons */
+    .ble-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .btn-action {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border-color);
+      color: #fff;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between
