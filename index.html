@@ -44,7 +44,6 @@
       flex-direction: column;
     }
 
-    /* Top iOS / Bluefy Notice Banner */
     #ios-notice {
       background: linear-gradient(90deg, #ff9100, #fc5200);
       color: #000;
@@ -69,7 +68,6 @@
       font-size: 0.75rem;
     }
 
-    /* App Header */
     header {
       background-color: var(--bg-card-solid);
       border-bottom: 1px solid var(--border-color);
@@ -94,7 +92,6 @@
       -webkit-text-fill-color: transparent;
     }
 
-    /* Dynamic Bluetooth Connection Button */
     .btn-ble {
       background-color: #3a3a42;
       color: var(--text-muted);
@@ -121,7 +118,6 @@
       cursor: pointer;
     }
 
-    /* Main Grid Layout */
     .app-container {
       display: grid;
       grid-template-columns: 320px 1fr 340px;
@@ -141,7 +137,6 @@
       }
     }
 
-    /* Map Display */
     #map {
       grid-column: 2;
       grid-row: 1;
@@ -151,7 +146,6 @@
       z-index: 1;
     }
 
-    /* Left Control Sidebar */
     .left-panel {
       grid-column: 1;
       grid-row: 1 / span 2;
@@ -184,7 +178,6 @@
       align-items: center;
     }
 
-    /* BLE Connect Buttons */
     .ble-actions {
       display: flex;
       flex-direction: column;
@@ -201,4 +194,182 @@
       cursor: pointer;
       display: flex;
       align-items: center;
-      justify-content: space-between
+      justify-content: space-between;
+      transition: background 0.2s;
+    }
+    .btn-action:hover {
+      background: rgba(255,255,255,0.1);
+    }
+    .btn-action.connected {
+      border-color: var(--accent-green);
+      background: rgba(0, 230, 118, 0.1);
+    }
+
+    .slider-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .slider-val {
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: var(--accent-cyan);
+      text-align: center;
+    }
+    input[type=range] {
+      width: 100%;
+      accent-color: var(--accent-cyan);
+    }
+
+    .mode-switch {
+      display: flex;
+      background: rgba(0,0,0,0.3);
+      border-radius: 8px;
+      padding: 2px;
+      border: 1px solid var(--border-color);
+    }
+    .mode-btn {
+      flex: 1;
+      border: none;
+      background: none;
+      color: var(--text-muted);
+      padding: 6px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .mode-btn.active {
+      background: var(--accent-orange);
+      color: #fff;
+    }
+
+    .right-panel {
+      grid-column: 3;
+      grid-row: 1 / span 2;
+      background-color: var(--bg-card-solid);
+      border-left: 1px solid var(--border-color);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+      z-index: 10;
+    }
+
+    .hud-overlay {
+      position: absolute;
+      top: 70px;
+      right: 360px;
+      z-index: 500;
+      display: flex;
+      gap: 12px;
+      pointer-events: none;
+    }
+    @media (max-width: 1024px) {
+      .hud-overlay {
+        right: 16px;
+      }
+    }
+
+    .hud-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 12px 18px;
+      text-align: center;
+      backdrop-filter: blur(12px);
+      min-width: 100px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    .hud-label {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+    }
+    .hud-value {
+      font-size: 1.8rem;
+      font-weight: 900;
+      line-height: 1.1;
+    }
+
+    .bottom-panel {
+      grid-column: 2;
+      grid-row: 2;
+      background: var(--bg-card-solid);
+      border-top: 1px solid var(--border-color);
+      position: relative;
+      z-index: 10;
+      padding: 8px 16px;
+      display: flex;
+      flex-direction: column;
+    }
+    #elevation-canvas {
+      width: 100%;
+      height: 100px;
+    }
+
+    #log-console {
+      font-family: monospace;
+      font-size: 0.7rem;
+      background: #08080a;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 8px;
+      height: 140px;
+      overflow-y: auto;
+      color: #00e676;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .log-err { color: #ff1744; }
+    .log-warn { color: #ff9100; }
+    .log-info { color: #00f0ff; }
+
+    .lb-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+    .lb-table th {
+      text-align: left;
+      color: var(--text-muted);
+      padding: 6px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .lb-table td {
+      padding: 6px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+  </style>
+</head>
+<body>
+
+  <div id="ios-notice">
+    <i class="fa-solid fa-triangle-exclamation"></i>
+    <span>Notice: On iOS devices, the <strong>Bluefy Web BLE Browser</strong> or <strong>WebBLE</strong> app is required for Bluetooth connectivity.</span>
+    <button onclick="document.getElementById('ios-notice').style.display='none'">Dismiss</button>
+  </div>
+
+  <header>
+    <div class="brand">
+      <i class="fa-solid fa-person-biking fa-lg" style="color: var(--accent-orange);"></i>
+      <h1>VELOVET RIDE</h1>
+    </div>
+    
+    <button id="ble-main-cta" class="btn-ble" disabled>
+      <i class="fa-bluetooth-b fa-brands"></i>
+      <span id="ble-main-cta-text">Waiting for Bluetooth devices...</span>
+    </button>
+  </header>
+
+  <div class="app-container">
+    <div class="hud-overlay">
+      <div class="hud-card">
+        <div class="hud-label">Power</div>
+        <div class="hud-value" id="hud-power" style="color: var(--accent-orange);">0 <span style="font-size:0.9rem">W</span></div>
+      </div>
+      <div class="hud-card">
+        <div class
